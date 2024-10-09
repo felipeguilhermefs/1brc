@@ -5,27 +5,23 @@ local function read(filename)
 	return content
 end
 
-local MIN = 1
-local MAX = 2
-local SUM = 3
-local COUNT = 4
-
 local function accumulate(content)
 	local records = {}
 	local temperature
 	local record
+	local number = tonumber
 	for city, measurement in content:gmatch("(%S+);(%S+)") do
-		temperature = tonumber(measurement)
+		temperature = number(measurement)
 		record = records[city]
 		if record then
-			if record[MIN] > temperature then
-				record[MIN] = temperature
+			if record[1] > temperature then
+				record[1] = temperature
 			end
-			if record[MAX] < temperature then
-				record[MAX] = temperature
+			if record[2] < temperature then
+				record[2] = temperature
 			end
-			record[SUM] = record[SUM] + temperature
-			record[COUNT] = record[COUNT] + 1
+			record[3] = record[3] + temperature
+			record[4] = record[4] + 1
 		else
 			records[city] = { temperature, temperature, temperature, 1 }
 		end
@@ -36,7 +32,7 @@ end
 local function join(statistics)
 	local result = {}
 	for city, stats in pairs(statistics) do
-		result[city] = stats[MIN] .. "/" .. (stats[SUM] / stats[COUNT]) .. "/" .. stats[MAX]
+		result[city] = stats[1] .. "/" .. (stats[3] / stats[4]) .. "/" .. stats[2]
 	end
 	return result
 end
