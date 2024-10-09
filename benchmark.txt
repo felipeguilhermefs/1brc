@@ -1,1 +1,4 @@
-First take: make 1brc  378.67s user 4.79s system 99% cpu 6:23.51 total
+First take: 
+	make 1brc  378.67s user 4.79s system 99% cpu 6:23.51 total
+Simple optimizations:
+	make 1brc  359.55s user 4.67s system 100% cpu 6:04.21 total
