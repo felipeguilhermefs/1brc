@@ -59,4 +59,4 @@ local function brc(filename)
 	print(formatJavaMap(result))
 end
 
-brc("small.csv")
+brc(arg[1])
