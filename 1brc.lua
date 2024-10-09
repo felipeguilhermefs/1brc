@@ -1,36 +1,32 @@
-local function read(filename)
-	local file = assert(io.open(filename, "r"))
-	local content = file:read("*all")
-	file:close()
-	return content
-end
+local fmt = string.format
+local min = math.min
+local max = math.max
+local number = tonumber
 
-local function accumulate(content)
+local function accumulate(filename)
 	local records = {}
-	local temperature
+
+	local file = assert(io.open(filename, "rb"))
 	local record
-	local number = tonumber
-	for city, measurement in content:gmatch("(%S+);(%S+)") do
-		temperature = number(measurement)
+	for line in file:lines() do
+		local semicolon = line:find(";", 1, true)
+		local city = line:sub(1, semicolon - 1)
+		local temperature = number(line:sub(semicolon + 1))
 		record = records[city]
 		if record then
-			if record[1] > temperature then
-				record[1] = temperature
-			end
-			if record[2] < temperature then
-				record[2] = temperature
-			end
+			record[1] = min(record[1], temperature)
+			record[2] = max(record[2], temperature)
 			record[3] = record[3] + temperature
 			record[4] = record[4] + 1
 		else
 			records[city] = { temperature, temperature, temperature, 1 }
 		end
 	end
+	file:close()
 	return records
 end
 
 local function format(statistics)
-	local fmt = string.format
 	local pattern = "%s=%.1f/%.1f/%.1f"
 
 	local result = {}
@@ -42,14 +38,8 @@ local function format(statistics)
 end
 
 local function brc(filename)
-	local clock = os.clock
-	print("start", clock())
-	local content = read(filename)
-	print("read", clock())
-	local statistics = accumulate(content)
-	print("accumulate", clock())
+	local statistics = accumulate(filename)
 	local result = format(statistics)
-	print("format", clock())
 	print(result)
 end
 
