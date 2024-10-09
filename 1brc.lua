@@ -12,9 +12,11 @@ local COUNT = 4
 
 local function accumulate(content)
 	local records = {}
+	local temperature
+	local record
 	for city, measurement in content:gmatch("(%S+);(%S+)") do
-		local temperature = tonumber(measurement)
-		local record = records[city]
+		temperature = tonumber(measurement)
+		record = records[city]
 		if record then
 			if record[MIN] > temperature then
 				record[MIN] = temperature
@@ -25,7 +27,7 @@ local function accumulate(content)
 			record[SUM] = record[SUM] + temperature
 			record[COUNT] = record[COUNT] + 1
 		else
-			records[city] = { [MIN] = temperature, [MAX] = temperature, [SUM] = temperature, [COUNT] = 1 }
+			records[city] = { temperature, temperature, temperature, 1 }
 		end
 	end
 	return records
