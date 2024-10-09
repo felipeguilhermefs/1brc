@@ -29,34 +29,28 @@ local function accumulate(content)
 	return records
 end
 
-local function join(statistics)
-	local format = string.format
-	local pattern = "%.2f/%.2f/%.2f"
+local function format(statistics)
+	local fmt = string.format
+	local pattern = "%s=%.1f/%.1f/%.1f"
 
 	local result = {}
 	for city, stats in pairs(statistics) do
-		result[city] = format(pattern, stats[1], (stats[3] / stats[4]), stats[2])
+		result[#result + 1] = fmt(pattern, city, stats[1], stats[3] / stats[4], stats[2])
 	end
-	return result
-end
 
-local function formatJavaMap(tbl)
-	-- Results are in Java "Map.toString" format
-	local format = string.format
-	local pattern = "%s=%s"
-
-	local result = {}
-	for k, v in pairs(tbl) do
-		result[#result + 1] = format(pattern, k, v)
-	end
-	return format("{%s}", table.concat(result, ","))
+	return fmt("{%s}", table.concat(result, ","))
 end
 
 local function brc(filename)
+	local clock = os.clock
+	print("start", clock())
 	local content = read(filename)
+	print("read", clock())
 	local statistics = accumulate(content)
-	local result = join(statistics)
-	print(formatJavaMap(result))
+	print("accumulate", clock())
+	local result = format(statistics)
+	print("format", clock())
+	print(result)
 end
 
 brc(arg[1])
