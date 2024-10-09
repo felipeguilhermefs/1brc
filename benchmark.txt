@@ -4,3 +4,5 @@ Simple optimizations:
 	make 1brc  359.55s user 4.67s system 100% cpu 6:04.21 total
 Avoid all globals:
 	make 1brc  340.31s user 4.77s system 99% cpu 5:45.08 total
+Format strings:
+	make 1brc  338.68s user 4.90s system 99% cpu 5:43.65 total

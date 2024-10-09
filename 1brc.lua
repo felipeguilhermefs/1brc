@@ -30,24 +30,26 @@ local function accumulate(content)
 end
 
 local function join(statistics)
+	local format = string.format
+	local pattern = "%.2f/%.2f/%.2f"
+
 	local result = {}
 	for city, stats in pairs(statistics) do
-		result[city] = stats[1] .. "/" .. (stats[3] / stats[4]) .. "/" .. stats[2]
+		result[city] = format(pattern, stats[1], (stats[3] / stats[4]), stats[2])
 	end
 	return result
 end
 
 local function formatJavaMap(tbl)
 	-- Results are in Java "Map.toString" format
-	local result = "{"
+	local format = string.format
+	local pattern = "%s=%s"
+
+	local result = {}
 	for k, v in pairs(tbl) do
-		result = result .. k .. "=" .. v .. ","
+		result[#result + 1] = format(pattern, k, v)
 	end
-	-- Remove leading commas from the result
-	if result ~= "" then
-		result = result:sub(1, result:len() - 1)
-	end
-	return result .. "}"
+	return format("{%s}", table.concat(result, ","))
 end
 
 local function brc(filename)
