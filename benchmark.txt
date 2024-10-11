@@ -10,3 +10,7 @@ Read by line:
 	make 1brc  419.77s user 4.80s system 99% cpu 7:04.58 total
 Read by line (LuaJIT):
 	make 1brc  448.96s user 4.63s system 99% cpu 7:33.60 total
+Fork Join:
+	make 1brc 844.45s user 8.30s system 1175% cpu 1:12.56 total
+Fork Join (LuaJIT):
+	make 1brc 796.99s user 7.17s system 1182% cpu 1:08.00 total

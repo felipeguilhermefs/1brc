@@ -1,8 +1,8 @@
 .PHONY: small
 small:
-	luajit 1brc.lua small.csv
+	INPUT_FILE=small.csv PARALLELISM=2 luajit 1brc.lua
 
 .PHONY: 1brc
 1brc:
-	luajit 1brc.lua 1brc.csv
+	INPUT_FILE=1brc.csv PARALLELISM=12 luajit 1brc.lua
 
