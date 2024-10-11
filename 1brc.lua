@@ -1,9 +1,8 @@
-local fmt = string.format
-local min = math.min
-local max = math.max
-local number = tonumber
-
 local function accumulate(filename)
+	local number = tonumber
+	local max = math.max
+	local min = math.min
+
 	local records = {}
 
 	local file = assert(io.open(filename, "rb"))
@@ -27,6 +26,8 @@ local function accumulate(filename)
 end
 
 local function format(statistics)
+	local fmt = string.format
+
 	local pattern = "%s=%.1f/%.1f/%.1f"
 
 	local result = {}
@@ -42,5 +43,7 @@ local function brc(filename)
 	local result = format(statistics)
 	print(result)
 end
+
+-- local function brc()
 
 brc(arg[1])
