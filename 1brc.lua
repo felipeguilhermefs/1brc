@@ -2,7 +2,6 @@ local max = math.max
 local min = math.min
 local number = tonumber
 local fmt = string.format
-local unpack = table.unpack or unpack
 
 local function work(filename, offset, limit)
 	local file = assert(io.open(filename, "r"))
@@ -16,9 +15,12 @@ local function work(filename, offset, limit)
 	local record
 	local city
 	local temp
+	local split
+	local sep = ";"
 	for line in nextLine do
-		city, temp = line:match("(%S+);(%S+)")
-		temp = number(temp)
+		split = line:find(sep, 1, true)
+		city = line:sub(1, split - 1)
+		temp = number(line:sub(split + 1))
 
 		record = records[city]
 		if record then
@@ -36,8 +38,11 @@ local function work(filename, offset, limit)
 	end
 	file:close()
 
+	local write = io.write
+	local unpack = table.unpack or unpack
+	local pattern = "%s;%.1f;%.1f;%.1f;%.1f\n"
 	for c, r in pairs(records) do
-		io.write(fmt("%s;%.1f;%.1f;%.1f;%.1f\n", c, unpack(r)))
+		write(fmt(pattern, c, unpack(r)))
 	end
 end
 
@@ -54,11 +59,12 @@ local function fork(workAmount, workerCount)
 	local offset = 0
 	local limit
 	local workers = {}
+	local pattern = "luajit 1brc.lua worker %d %d"
 	for _ = 1, workerCount do
 		-- Spread the remaining through the workers
 		limit = offset + batchSize + min(max(remainder, 0), 1)
 
-		local cmd = fmt("luajit 1brc.lua worker %d %d", offset, limit)
+		local cmd = fmt(pattern, offset, limit)
 		workers[#workers + 1] = assert(io.popen(cmd, "r"))
 
 		offset = limit
@@ -70,9 +76,10 @@ end
 local function join(workers)
 	local records = {}
 	local record
+	local pattern = "(%S+);(%S+);(%S+);(%S+);(%S+)"
 	for _, worker in pairs(workers) do
 		for line in worker:lines() do
-			local city, minT, maxT, sum, count = line:match("(%S+);(%S+);(%S+);(%S+);(%S+)")
+			local city, minT, maxT, sum, count = line:match(pattern)
 
 			record = records[city]
 			if record then
