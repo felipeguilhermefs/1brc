@@ -1,52 +1,67 @@
-local max = math.max
-local min = math.min
-local number = tonumber
-local fmt = string.format
+local function ffnumber(str)
+	local start = 1
+	local negative = false
+	if str:byte() == 45 then -- 45 = "-"
+		start = 2
+		negative = true
+	end
+
+	local split = str:find(".", 1, true)
+
+	local base = 0
+	for i = start, split - 1 do
+		base = base * 10 + str:byte(i) - 48 -- 48 = "0"
+	end
+
+	-- Multiply by 10 to ensure integer
+	-- Data has only 1 decimal digit
+	local result = base * 10 + str:byte(split + 1) - 48
+	if negative then
+		result = result * -1
+	end
+	return result
+end
 
 local function work(filename, offset, limit)
 	local file = assert(io.open(filename, "r"))
-	file:seek("set", max(offset - 1, 0))
-	local nextLine = file:lines()
+
+	-- Position reader at the correct offset
+	file:seek("set", math.max(offset - 1, 0))
+	local lines = file:lines()
 	if offset > 0 and file:read(1) ~= "\n" then
-		nextLine()
+		lines()
 	end
 
 	local records = {}
-	local record
-	local city
-	local temp
-	local split
-	local sep = ";"
-	for line in nextLine do
-		split = line:find(sep, 1, true)
-		city = line:sub(1, split - 1)
-		temp = number(line:sub(split + 1))
+	for line in lines do
+		local split = line:find(";", 1, true)
+		local city = line:sub(1, split - 1)
+		local temp = ffnumber(line:sub(split + 1))
 
-		record = records[city]
+		local record = records[city]
 		if record then
-			record[1] = min(record[1], temp)
-			record[2] = max(record[2], temp)
+			record[1] = math.min(record[1], temp)
+			record[2] = math.max(record[2], temp)
 			record[3] = record[3] + temp
 			record[4] = record[4] + 1
 		else
 			records[city] = { temp, temp, temp, 1 }
 		end
 
+		-- Just work its batch
 		if file:seek() >= limit then
 			break
 		end
 	end
 	file:close()
 
-	local write = io.write
-	local unpack = table.unpack or unpack
-	local pattern = "%s;%.1f;%.1f;%.1f;%.1f\n"
-	for c, r in pairs(records) do
-		write(fmt(pattern, c, unpack(r)))
+	local writePattern = "%s;%d;%d;%d;%d\n"
+	for city, record in pairs(records) do
+		io.write(writePattern:format(city, unpack(record)))
 	end
 end
 
-local function calculateFileSize(filename)
+local function fileSize(filename)
 	local file = assert(io.open(filename, "r"))
 	local filesize = file:seek("end")
 	file:close()
@@ -57,14 +72,13 @@ local function fork(workAmount, workerCount)
 	local batchSize = math.floor(workAmount / workerCount)
 	local remainder = workAmount % workerCount
 	local offset = 0
-	local limit
 	local workers = {}
-	local pattern = "luajit 1brc.lua worker %d %d"
+	local cmdPattern = "luajit 1brc.lua worker %d %d"
 	for _ = 1, workerCount do
 		-- Spread the remaining through the workers
-		limit = offset + batchSize + min(max(remainder, 0), 1)
+		local limit = offset + batchSize + math.min(math.max(remainder, 0), 1)
 
-		local cmd = fmt(pattern, offset, limit)
+		local cmd = cmdPattern:format(offset, limit)
 		workers[#workers + 1] = assert(io.popen(cmd, "r"))
 
 		offset = limit
@@ -74,47 +88,46 @@ local function fork(workAmount, workerCount)
 end
 
 local function join(workers)
-	local records = {}
-	local record
-	local pattern = "(%S+);(%S+);(%S+);(%S+);(%S+)"
+	local statistics = {}
+	local statsPattern = "(%S+);(%S+);(%S+);(%S+);(%S+)"
 	for _, worker in pairs(workers) do
 		for line in worker:lines() do
-			local city, minT, maxT, sum, count = line:match(pattern)
+			local city, minT, maxT, sum, count = line:match(statsPattern)
 
-			record = records[city]
-			if record then
-				record[1] = min(record[1], number(minT))
-				record[2] = max(record[2], number(maxT))
-				record[3] = record[3] + number(sum)
-				record[4] = record[4] + number(count)
+			local stats = statistics[city]
+			if stats then
+				stats[1] = math.min(stats[1], minT)
+				stats[2] = math.max(stats[2], maxT)
+				stats[3] = stats[3] + sum
+				stats[4] = stats[4] + count
 			else
-				records[city] = { number(minT), number(maxT), number(sum), number(count) }
+				statistics[city] = { minT, maxT, sum, count }
 			end
 		end
 
 		worker:close()
 	end
-	return records
+	return statistics
 end
 
 local function format(statistics)
-	local pattern = "%s=%.1f/%.1f/%.1f"
-
-	local result = {}
+	local outputPattern = "%s=%.1f/%.1f/%.1f"
+	local output = {}
 	for city, stats in pairs(statistics) do
-		result[#result + 1] = fmt(pattern, city, stats[1], stats[3] / stats[4], stats[2])
+		-- Divides by 10 to get back to original scale
+		output[#output + 1] = outputPattern:format(city, stats[1] / 10, stats[3] / 10 / stats[4], stats[2] / 10)
 	end
 
-	return fmt("{%s}", table.concat(result, ","))
+	return string.format("{%s}", table.concat(output, ","))
 end
 
 local function main()
 	local filename = os.getenv("INPUT_FILE")
 	if arg[1] == "worker" then
-		work(filename, number(arg[2]), number(arg[3]))
+		work(filename, tonumber(arg[2]), tonumber(arg[3]))
 	else
-		local filesize = calculateFileSize(filename)
-		local parallelism = number(os.getenv("PARALLELISM") or 4)
+		local filesize = fileSize(filename)
+		local parallelism = tonumber(os.getenv("PARALLELISM") or 4)
 		local workers = fork(filesize, parallelism)
 		local statistics = join(workers)
 		local result = format(statistics)

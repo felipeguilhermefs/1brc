@@ -16,3 +16,5 @@ Fork Join (LuaJIT):
 	make 1brc 796.99s user 7.17s system 1182% cpu 1:08.00 total
 Find+Substr:
 	make 1brc  642.97s user 6.90s system 1179% cpu 55.107 total
+Fast and specific tonumber:
+	make 1brc  353.31s user 6.58s system 1178% cpu 30.526 total
