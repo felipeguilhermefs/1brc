@@ -18,3 +18,5 @@ Find+Substr:
 	make 1brc  642.97s user 6.90s system 1179% cpu 55.107 total
 Fast and specific tonumber:
 	make 1brc  353.31s user 6.58s system 1178% cpu 30.526 total
+Workers read their batch at once:
+	make 1brc  285.57s user 5.84s system 1153% cpu 25.263 total

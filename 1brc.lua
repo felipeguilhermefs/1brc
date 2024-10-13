@@ -25,18 +25,27 @@ end
 local function work(filename, offset, limit)
 	local file = assert(io.open(filename, "r"))
 
-	-- Position reader at the correct offset
+	-- Find position of first line in batch
 	file:seek("set", math.max(offset - 1, 0))
-	local lines = file:lines()
 	if offset > 0 and file:read(1) ~= "\n" then
-		lines()
+		local _ = file:read("*l")
 	end
+	local startPos = file:seek()
+
+	-- Find position of last line in batch
+	file:seek("set", limit)
+	if file:read(1) ~= "\n" then
+		local _ = file:read("*l")
+	end
+	local endPos = file:seek()
+
+	-- Read entire batch at once
+	file:seek("set", startPos)
+	local content = file:read(endPos - startPos)
 
 	local records = {}
-	for line in lines do
-		local split = line:find(";", 1, true)
-		local city = line:sub(1, split - 1)
-		local temp = ffnumber(line:sub(split + 1))
+	for city, measurement in content:gmatch("(%S+);(%S+)") do
+		local temp = ffnumber(measurement)
 
 		local record = records[city]
 		if record then
@@ -46,11 +55,6 @@ local function work(filename, offset, limit)
 			record[4] = record[4] + 1
 		else
 			records[city] = { temp, temp, temp, 1 }
-		end
-
-		-- Just work its batch
-		if file:seek() >= limit then
-			break
 		end
 	end
 	file:close()
@@ -130,8 +134,7 @@ local function main()
 		local parallelism = tonumber(os.getenv("PARALLELISM") or 4)
 		local workers = fork(filesize, parallelism)
 		local statistics = join(workers)
-		local result = format(statistics)
-		print(result)
+		io.write(format(statistics))
 	end
 end
 
