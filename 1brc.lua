@@ -1,29 +1,13 @@
 local tnew = require("table.new")
 local ffi = require("ffi")
 
-local function ffnumber(str)
-	local start = 1
-	local negative = false
-	if str:byte() == 45 then -- 45 = "-"
-		start = 2
-		negative = true
-	end
+ffi.cdef([[
+int atoi(const char *nptr);
+double atof(const char *nptr);
+struct stats { int min, max, sum, count; };
+]])
 
-	local split = str:find(".", 1, true)
-
-	local base = 0
-	for i = start, split - 1 do
-		base = base * 10 + str:byte(i) - 48 -- 48 = "0"
-	end
-
-	-- Multiply by 10 to ensure integer
-	-- Data has only 1 decimal digit
-	local result = base * 10 + str:byte(split + 1) - 48
-	if negative then
-		result = result * -1
-	end
-	return result
-end
+local C = ffi.C
 
 local function work(filename, offset, limit, initCities)
 	local file = assert(io.open(filename, "r"))
@@ -55,23 +39,23 @@ local function work(filename, offset, limit, initCities)
 		local city = content:sub(cstart, cend - 1)
 		cstart = cend + 1
 		cend = content:find("\n", cstart)
-		local temp = ffnumber(content:sub(cstart, cend - 1))
+		local temp = C.atof(content:sub(cstart, cend - 1)) * 10
 		cstart = cend + 1
 
 		local record = records[city]
 		if record then
-			record[0] = math.min(record[0], temp)
-			record[1] = math.max(record[1], temp)
-			record[2] = record[2] + temp
-			record[3] = record[3] + 1
+			record.min = math.min(record.min, temp)
+			record.max = math.max(record.max, temp)
+			record.sum = record.sum + temp
+			record.count = record.count + 1
 		else
-			records[city] = ffi.new("int[4]", { temp, temp, temp, 1 })
+			records[city] = ffi.new("struct stats", { temp, temp, temp, 1 })
 		end
 	end
 
 	local writePattern = "%s;%d;%d;%d;%d\n"
 	for city, record in pairs(records) do
-		io.write(writePattern:format(city, record[0], record[1], record[2], record[3]))
+		io.write(writePattern:format(city, record.min, record.max, record.sum, record.count))
 	end
 end
 
@@ -109,12 +93,12 @@ local function join(workers, maxCities)
 
 			local stats = statistics[city]
 			if stats then
-				stats[0] = math.min(stats[0], tonumber(minT))
-				stats[1] = math.max(stats[1], tonumber(maxT))
-				stats[2] = stats[2] + tonumber(sum)
-				stats[3] = stats[3] + tonumber(count)
+				stats.min = math.min(stats.min, C.atoi(minT))
+				stats.max = math.max(stats.max, C.atoi(maxT))
+				stats.sum = stats.sum + C.atoi(sum)
+				stats.count = stats.count + C.atoi(count)
 			else
-				statistics[city] = ffi.new("int[4]", { tonumber(minT), tonumber(maxT), tonumber(sum), tonumber(count) })
+				statistics[city] = ffi.new("struct stats", { C.atoi(minT), C.atoi(maxT), C.atoi(sum), C.atoi(count) })
 			end
 		end
 
@@ -128,7 +112,7 @@ local function format(statistics)
 	local output = {}
 	for city, stats in pairs(statistics) do
 		-- Divides by 10 to get back to original scale
-		output[#output + 1] = outputPattern:format(city, stats[0] / 10, stats[2] / 10 / stats[3], stats[1] / 10)
+		output[#output + 1] = outputPattern:format(city, stats.min / 10, stats.sum / 10 / stats.count, stats.max / 10)
 	end
 
 	return string.format("{%s}", table.concat(output, ","))
@@ -136,10 +120,10 @@ end
 
 local function main()
 	local filename = os.getenv("INPUT_FILE")
-	local parallelism = tonumber(os.getenv("PARALLELISM") or 4)
+	local parallelism = C.atoi(os.getenv("PARALLELISM") or 4)
 	local maxCities = 10000 -- at Most 10000 cities, from rules and limits
 	if arg[1] == "worker" then
-		work(filename, tonumber(arg[2]), tonumber(arg[3]), math.floor(maxCities / parallelism))
+		work(filename, C.atoi(arg[2]), C.atoi(arg[3]), math.floor(maxCities / parallelism))
 	else
 		local filesize = fileSize(filename)
 		local workers = fork(filesize, parallelism)
