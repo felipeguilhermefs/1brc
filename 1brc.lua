@@ -42,10 +42,18 @@ local function work(filename, offset, limit)
 	-- Read entire batch at once
 	file:seek("set", startPos)
 	local content = file:read(endPos - startPos)
+	file:close()
 
 	local records = {}
-	for city, measurement in content:gmatch("(%S+);(%S+)") do
-		local temp = ffnumber(measurement)
+	local cstart = 1
+	local cend
+	while cstart < #content do
+		cend = content:find(";", cstart)
+		local city = content:sub(cstart, cend - 1)
+		cstart = cend + 1
+		cend = content:find("\n", cstart)
+		local temp = ffnumber(content:sub(cstart, cend - 1))
+		cstart = cend + 1
 
 		local record = records[city]
 		if record then
@@ -57,7 +65,6 @@ local function work(filename, offset, limit)
 			records[city] = { temp, temp, temp, 1 }
 		end
 	end
-	file:close()
 
 	local writePattern = "%s;%d;%d;%d;%d\n"
 	for city, record in pairs(records) do

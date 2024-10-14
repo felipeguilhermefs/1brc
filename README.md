@@ -7,14 +7,15 @@
 - Single Reads (no line by line)
 - Table arrays over dictionaries
 - Local lookups for frequently used functions (string.format, etc.)
+- Substring over Match
 
 #### Result:
 
 ```
-lua  501.97s user 5.47s system 1168% cpu 43.411 total
+lua 428.36s user 5.46s system 1158% cpu 37.449 total
 ```
 
-**~43s**
+**~37s**
 
 ### LuaJIT
 
@@ -27,9 +28,9 @@ lua  501.97s user 5.47s system 1168% cpu 43.411 total
 #### Result:
 
 ```
-luajit  285.57s user 5.84s system 1153% cpu 25.263 total
+luajit 96.62s user 7.01s system 1048% cpu 9.886 total
 ```
 
-**~25s**
+**~10s**
 
 ### LuaJIT + FFI
