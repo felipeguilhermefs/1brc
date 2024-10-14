@@ -1,4 +1,5 @@
 local tnew = require("table.new")
+local ffi = require("ffi")
 
 local function ffnumber(str)
 	local start = 1
@@ -59,18 +60,18 @@ local function work(filename, offset, limit, initCities)
 
 		local record = records[city]
 		if record then
-			record[1] = math.min(record[1], temp)
-			record[2] = math.max(record[2], temp)
-			record[3] = record[3] + temp
-			record[4] = record[4] + 1
+			record[0] = math.min(record[0], temp)
+			record[1] = math.max(record[1], temp)
+			record[2] = record[2] + temp
+			record[3] = record[3] + 1
 		else
-			records[city] = { temp, temp, temp, 1 }
+			records[city] = ffi.new("int[4]", { temp, temp, temp, 1 })
 		end
 	end
 
 	local writePattern = "%s;%d;%d;%d;%d\n"
 	for city, record in pairs(records) do
-		io.write(writePattern:format(city, unpack(record)))
+		io.write(writePattern:format(city, record[0], record[1], record[2], record[3]))
 	end
 end
 
@@ -108,12 +109,12 @@ local function join(workers, maxCities)
 
 			local stats = statistics[city]
 			if stats then
-				stats[1] = math.min(stats[1], minT)
-				stats[2] = math.max(stats[2], maxT)
-				stats[3] = stats[3] + sum
-				stats[4] = stats[4] + count
+				stats[0] = math.min(stats[0], tonumber(minT))
+				stats[1] = math.max(stats[1], tonumber(maxT))
+				stats[2] = stats[2] + tonumber(sum)
+				stats[3] = stats[3] + tonumber(count)
 			else
-				statistics[city] = { minT, maxT, sum, count }
+				statistics[city] = ffi.new("int[4]", { tonumber(minT), tonumber(maxT), tonumber(sum), tonumber(count) })
 			end
 		end
 
@@ -127,7 +128,7 @@ local function format(statistics)
 	local output = {}
 	for city, stats in pairs(statistics) do
 		-- Divides by 10 to get back to original scale
-		output[#output + 1] = outputPattern:format(city, stats[1] / 10, stats[3] / 10 / stats[4], stats[2] / 10)
+		output[#output + 1] = outputPattern:format(city, stats[0] / 10, stats[2] / 10 / stats[3], stats[1] / 10)
 	end
 
 	return string.format("{%s}", table.concat(output, ","))
