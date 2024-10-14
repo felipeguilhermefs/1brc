@@ -1,3 +1,5 @@
+local tnew = require("table.new")
+
 local function ffnumber(str)
 	local start = 1
 	local negative = false
@@ -22,7 +24,7 @@ local function ffnumber(str)
 	return result
 end
 
-local function work(filename, offset, limit)
+local function work(filename, offset, limit, initCities)
 	local file = assert(io.open(filename, "r"))
 
 	-- Find position of first line in batch
@@ -44,7 +46,7 @@ local function work(filename, offset, limit)
 	local content = file:read(endPos - startPos)
 	file:close()
 
-	local records = {}
+	local records = tnew(0, initCities)
 	local cstart = 1
 	local cend
 	while cstart < #content do
@@ -97,8 +99,8 @@ local function fork(workAmount, workerCount)
 	return workers
 end
 
-local function join(workers)
-	local statistics = {}
+local function join(workers, maxCities)
+	local statistics = tnew(0, maxCities)
 	local statsPattern = "(%S+);(%S+);(%S+);(%S+);(%S+)"
 	for _, worker in pairs(workers) do
 		for line in worker:lines() do
@@ -133,13 +135,14 @@ end
 
 local function main()
 	local filename = os.getenv("INPUT_FILE")
+	local parallelism = tonumber(os.getenv("PARALLELISM") or 4)
+	local maxCities = 10000 -- at Most 10000 cities, from rules and limits
 	if arg[1] == "worker" then
-		work(filename, tonumber(arg[2]), tonumber(arg[3]))
+		work(filename, tonumber(arg[2]), tonumber(arg[3]), math.floor(maxCities / parallelism))
 	else
 		local filesize = fileSize(filename)
-		local parallelism = tonumber(os.getenv("PARALLELISM") or 4)
 		local workers = fork(filesize, parallelism)
-		local statistics = join(workers)
+		local statistics = join(workers, maxCities)
 		io.write(format(statistics))
 	end
 end

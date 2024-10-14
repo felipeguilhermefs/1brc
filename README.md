@@ -28,9 +28,9 @@ lua 428.36s user 5.46s system 1158% cpu 37.449 total
 #### Result:
 
 ```
-luajit 96.62s user 7.01s system 1048% cpu 9.886 total
+luajit 93.47s user 6.43s system 1052% cpu 9.489 total
 ```
 
-**~10s**
+**~9.5s**
 
 ### LuaJIT + FFI
