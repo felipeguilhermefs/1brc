@@ -115,6 +115,8 @@ local function format(statistics)
 		output[#output + 1] = outputPattern:format(city, stats.min / 10, stats.sum / 10 / stats.count, stats.max / 10)
 	end
 
+	table.sort(output)
+
 	return string.format("{%s}", table.concat(output, ","))
 end
 
