@@ -1,14 +1,16 @@
 local tnew = require("table.new")
-local MAX_CITIES = 10000 -- at Most 10000 cities, from rules and limits
-local INIT_CITIES = 512
 
-collectgarbage("stop") -- Stop the GC (we will run it manually for better performances)
+collectgarbage("stop") -- Stop the GC do not need it for a quick run
 
 local chr = string.byte
 local max = math.max
 local min = math.min
 local fmt = string.format
 local substr = string.sub
+local output = io.write
+
+local MAX_CITIES = 10000 -- at Most 10000 cities, from rules and limits
+local INIT_CITIES = 512
 
 local function ffnumber(str, sstart, send)
 	local negative = false
@@ -17,26 +19,26 @@ local function ffnumber(str, sstart, send)
 		negative = true
 	end
 
-	local split = sstart
-	while split < send do
-		if chr(str, split) == 46 then -- 46 = "."
+	local dot = sstart
+	while dot < send do
+		if chr(str, dot) == 46 then -- 46 = "."
 			break
 		end
-		split = split + 1
+		dot = dot + 1
 	end
 
-	local base = 0
-	for i = sstart, split - 1 do
-		base = base * 10 + chr(str, i) - 48 -- 48 = "0"
+	local num = 0
+	for i = sstart, dot - 1 do
+		num = num * 10 + chr(str, i) - 48 -- 48 = "0"
 	end
 
 	-- Multiply by 10 to ensure integer
 	-- Data has only 1 decimal digit
-	local result = base * 10 + chr(str, split + 1) - 48
+	num = num * 10 + chr(str, dot + 1) - 48
 	if negative then
-		result = result * -1
+		num = num * -1
 	end
-	return result
+	return num
 end
 
 local function work(filename, offset, limit)
@@ -65,6 +67,7 @@ local function work(filename, offset, limit)
 	local cstart = 1
 	local cend
 	while cstart < #content do
+		-- Find ; position to extract the city
 		cend = cstart
 		while cend < #content do
 			if chr(content, cend) == 59 then -- 59 == ";"
@@ -74,6 +77,8 @@ local function work(filename, offset, limit)
 		end
 		local city = substr(content, cstart, cend - 1)
 		cstart = cend + 1
+
+		-- Find \n to extract the measurement
 		cend = cstart
 		while cend < #content do
 			if chr(content, cend) == 10 then -- 10 == "\n"
@@ -84,6 +89,7 @@ local function work(filename, offset, limit)
 		local temp = ffnumber(content, cstart, cend - 1)
 		cstart = cend + 1
 
+		-- Accumulate measurements
 		local record = records[city]
 		if record then
 			record[1] = min(record[1], temp)
@@ -95,9 +101,8 @@ local function work(filename, offset, limit)
 		end
 	end
 
-	local writePattern = "%s;%d;%d;%d;%d\n"
 	for city, record in pairs(records) do
-		io.write(fmt(writePattern, city, unpack(record)))
+		output(city, ";", record[1], ";", record[2], ";", record[3], ";", record[4], "\n")
 	end
 end
 
@@ -113,12 +118,13 @@ local function fork(workAmount, workerCount)
 	local remainder = workAmount % workerCount
 	local offset = 0
 	local workers = tnew(workerCount, 0)
-	local cmdPattern = "luajit 1brc.lua worker %d %d"
+	local cmdPattern = "%s %s worker %d %d"
 	for _ = 1, workerCount do
-		-- Spread the remaining through the workers
+		-- Spread the remaining bytes between the workers
 		local limit = offset + chunkSize + min(max(remainder, 0), 1)
 
-		workers[#workers + 1] = assert(io.popen(fmt(cmdPattern, offset, limit), "r"))
+		local cmd = fmt(cmdPattern, arg[-1], arg[0], offset, limit)
+		workers[#workers + 1] = assert(io.popen(cmd, "r"))
 
 		offset = limit
 		remainder = remainder - 1
@@ -149,17 +155,17 @@ local function join(workers)
 	return statistics
 end
 
-local function format(statistics)
-	local outputPattern = "%s=%.1f/%.1f/%.1f"
-	local output = tnew(MAX_CITIES, 0)
+local function answer(statistics)
+	local resultPattern = "%s=%.1f/%.1f/%.1f"
+	local result = tnew(MAX_CITIES, 0)
 	for city, stats in pairs(statistics) do
 		-- Divides by 10 to get back to original scale
-		output[#output + 1] = fmt(outputPattern, city, stats[1] / 10, stats[3] / 10 / stats[4], stats[2] / 10)
+		result[#result + 1] = fmt(resultPattern, city, stats[1] / 10, stats[3] / 10 / stats[4], stats[2] / 10)
 	end
 
-	table.sort(output)
+	table.sort(result)
 
-	return fmt("{%s}", table.concat(output, ","))
+	output("{", table.concat(result, ","), "}")
 end
 
 local function ncpu()
@@ -183,7 +189,7 @@ local function main()
 		local filesize = fileSize(filename)
 		local workers = fork(filesize, parallelism)
 		local statistics = join(workers)
-		io.write(format(statistics))
+		answer(statistics)
 	end
 end
 
