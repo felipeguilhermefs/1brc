@@ -1,4 +1,11 @@
-local tnew = require("table.new")
+local tnew
+if jit then
+	tnew = require("table.new")
+else
+	tnew = function()
+		return {}
+	end
+end
 
 collectgarbage("stop") -- Stop the GC do not need it for a quick run
 
