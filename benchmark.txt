@@ -27,3 +27,5 @@ Initialize hash size to minimize rehashes:
 	luajit     93.47s user 6.43s system 1052% cpu 9.489 total
 Use atoi, atof and C struct to aggregate:
 	luajit     40.77s user 2.88s system 996% cpu 4.379 total
+Revert to LuaJit, stop GC and reduce amount of string created:
+	luajit     57.66s user 5.52s system 1091% cpu 5.787 total
