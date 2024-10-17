@@ -120,9 +120,30 @@ local function format(statistics)
 	return string.format("{%s}", table.concat(output, ","))
 end
 
+local function ncpu()
+	local parallelism = os.getenv("PARALLELISM")
+	if parallelism then
+		return C.atoi(parallelism)
+	end
+
+	local cmd
+	if ffi.os == "Linux" then
+		cmd = "nproc"
+	elseif ffi.os == "OSX" then
+		cmd = "sysctl -n hw.ncpu"
+	else
+		return 4 -- whatever
+	end
+
+	local tool = assert(io.popen(cmd, "r"))
+	parallelism = assert(tool:read("*n"))
+	tool:close()
+	return parallelism * 2 -- just keep them more busy for now
+end
+
 local function main()
 	local filename = os.getenv("INPUT_FILE")
-	local parallelism = C.atoi(os.getenv("PARALLELISM") or 4)
+	local parallelism = ncpu()
 	local maxCities = 10000 -- at Most 10000 cities, from rules and limits
 	if arg[1] == "worker" then
 		work(filename, C.atoi(arg[2]), C.atoi(arg[3]), math.floor(maxCities / parallelism))
