@@ -1,4 +1,4 @@
 .PHONY: run
 run:
-	INPUT_FILE=1brc.csv luajit 1brc.lua
+	INPUT_FILE=measurements.txt luajit 1brc.lua
 

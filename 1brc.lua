@@ -11,6 +11,7 @@ local output = io.write
 
 local MAX_CITIES = 10000 -- at Most 10000 cities, from rules and limits
 local INIT_CITIES = 512
+local FILENAME = os.getenv("INPUT_FILE") or "measurements.txt"
 
 local function ffnumber(str, sstart, send)
 	local negative = false
@@ -41,8 +42,8 @@ local function ffnumber(str, sstart, send)
 	return num
 end
 
-local function work(filename, offset, limit)
-	local file = assert(io.open(filename, "rb"))
+local function work(offset, limit)
+	local file = assert(io.open(FILENAME, "rb"))
 
 	-- Find position of first line in chunk
 	file:seek("set", max(offset - 1, 0))
@@ -106,8 +107,8 @@ local function work(filename, offset, limit)
 	end
 end
 
-local function fileSize(filename)
-	local file = assert(io.open(filename, "rb"))
+local function fileSize()
+	local file = assert(io.open(FILENAME, "rb"))
 	local filesize = file:seek("end")
 	file:close()
 	return filesize
@@ -181,12 +182,11 @@ local function ncpu()
 end
 
 local function main()
-	local filename = os.getenv("INPUT_FILE")
-	local parallelism = ncpu() * 2 -- just keep them more busy for now
 	if arg[1] == "worker" then
-		work(filename, tonumber(arg[2]), tonumber(arg[3]))
+		work(tonumber(arg[2]), tonumber(arg[3]))
 	else
-		local filesize = fileSize(filename)
+		local parallelism = ncpu() * 2 -- just keep them more busy for now
+		local filesize = fileSize()
 		local workers = fork(filesize, parallelism)
 		local statistics = join(workers)
 		answer(statistics)
