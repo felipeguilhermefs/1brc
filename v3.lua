@@ -1,6 +1,3 @@
-local float = tonumber
-local fmt = string.format
-
 local MIN = 1
 local MAX = 2
 local SUM = 3
@@ -16,7 +13,7 @@ end
 local function aggregate(content)
 	local records = {}
 	for city, measurement in content:gmatch("(%S+);(%S+)") do
-		local temperature = float(measurement)
+		local temperature = tonumber(measurement)
 		local record = records[city]
 
 		if record == nil then
@@ -37,27 +34,26 @@ end
 
 local function join(records)
 	local statistics = {}
-	local result = "%s=%.1f/%.1f/%.1f"
 	for city, record in pairs(records) do
 		local mean = (record[SUM] / record[COUNT])
-		local stats = fmt(result, city, record[MIN], mean, record[MAX])
+		local stats = string.format("%s=%.1f/%.1f/%.1f", city, record[MIN], mean, record[MAX])
 
 		statistics[#statistics + 1] = stats
 	end
 	return statistics
 end
 
-local function formatJavaMap(statistics)
+local function format(statistics)
 	table.sort(statistics)
 
-	return "{" .. table.concat(statistics, ",") .. "}"
+	return string.format("{%s}", table.concat(statistics, ","))
 end
 
 local function brc(filename)
 	local content = read(filename)
 	local records = aggregate(content)
 	local statistics = join(records)
-	print(formatJavaMap(statistics))
+	print(format(statistics))
 end
 
 brc("measurements.txt")

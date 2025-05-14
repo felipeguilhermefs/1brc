@@ -35,16 +35,16 @@ local function join(records)
 	return statistics
 end
 
-local function formatJavaMap(statistics)
+local function format(statistics)
 	table.sort(statistics)
 
-	return "{" .. table.concat(statistics, ",") .. "}"
+	return string.format("{%s}", table.concat(statistics, ","))
 end
 
-local function brc(filename)
+local function main(filename)
 	local records = aggregate(filename)
 	local statistics = join(records)
-	print(formatJavaMap(statistics))
+	print(format(statistics))
 end
 
-brc("measurements.txt")
+main("measurements.txt")

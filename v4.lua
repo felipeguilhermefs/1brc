@@ -1,9 +1,3 @@
-local max = math.max
-local min = math.min
-local number = tonumber
-local fmt = string.format
-local unpack = table.unpack or unpack
-
 local MIN = 1
 local MAX = 2
 local SUM = 3
@@ -13,7 +7,7 @@ local function work(filename, offset, limit)
 	local file = assert(io.open(filename, "r"))
 
 	-- Move reader to correct position
-	file:seek("set", max(offset - 1, 0))
+	file:seek("set", math.max(offset - 1, 0))
 	local nextLine = file:lines()
 	if offset > 0 and file:read(1) ~= "\n" then
 		nextLine()
@@ -23,12 +17,12 @@ local function work(filename, offset, limit)
 	local records = {}
 	for line in nextLine do
 		local city, measurement = line:match("(%S+);(%S+)")
-		local temperature = number(measurement)
+		local temperature = tonumber(measurement)
 
 		local record = records[city]
 		if record then
-			record[MIN] = min(record[MIN], temperature)
-			record[MAX] = max(record[MAX], temperature)
+			record[MIN] = math.min(record[MIN], temperature)
+			record[MAX] = math.max(record[MAX], temperature)
 			record[SUM] = record[SUM] + temperature
 			record[COUNT] = record[COUNT] + 1
 		else
@@ -44,7 +38,7 @@ local function work(filename, offset, limit)
 
 	-- Send records back to master
 	for city, record in pairs(records) do
-		io.write(fmt("%s;%.1f;%.1f;%.1f;%.1f\n", city, unpack(record)))
+		io.write(string.format("%s;%.1f;%.1f;%.1f;%.1f\n", city, table.unpack(record)))
 	end
 end
 
@@ -69,9 +63,9 @@ local function fork(workAmount, workerCount)
 	local workers = {}
 	for _ = 1, workerCount do
 		-- Spread the remaining through the workers
-		local limit = offset + batchSize + min(max(remainder, 0), 1)
+		local limit = offset + batchSize + math.min(math.max(remainder, 0), 1)
 
-		local cmd = fmt("luajit v4 worker %d %d", offset, limit)
+		local cmd = string.format("luajit v4 worker %d %d", offset, limit)
 		workers[#workers + 1] = assert(io.popen(cmd, "r"))
 
 		offset = limit
@@ -88,12 +82,12 @@ local function join(workers)
 
 			local stats = statistics[city]
 			if stats == nil then
-				statistics[city] = { number(minT), number(maxT), number(sum), number(count) }
+				statistics[city] = { tonumber(minT), tonumber(maxT), tonumber(sum), tonumber(count) }
 			else
-				stats[MIN] = min(stats[MIN], number(minT))
-				stats[MAX] = max(stats[MAX], number(maxT))
-				stats[SUM] = stats[SUM] + number(sum)
-				stats[COUNT] = stats[COUNT] + number(count)
+				stats[MIN] = math.min(stats[MIN], tonumber(minT))
+				stats[MAX] = math.max(stats[MAX], tonumber(maxT))
+				stats[SUM] = stats[SUM] + tonumber(sum)
+				stats[COUNT] = stats[COUNT] + tonumber(count)
 			end
 		end
 
@@ -107,20 +101,18 @@ local function format(statistics)
 
 	local result = {}
 	for city, stats in pairs(statistics) do
-		result[#result + 1] = fmt(pattern, city, stats[1], stats[3] / stats[4], stats[2])
+		result[#result + 1] = string.format(pattern, city, stats[1], stats[3] / stats[4], stats[2])
 	end
 
 	table.sort(result)
 
-	return fmt("{%s}", table.concat(result, ","))
+	return string.format("{%s}", table.concat(result, ","))
 end
 
-local function main()
-	local filename = "measurements.txt"
-
+local function main(filename)
 	if arg[1] == "worker" then
-		local offset = number(arg[2])
-		local limit = number(arg[3])
+		local offset = tonumber(arg[2])
+		local limit = tonumber(arg[3])
 		work(filename, offset, limit)
 	else
 		local workers = fork(filesize(filename), ncpu())
@@ -129,4 +121,4 @@ local function main()
 	end
 end
 
-main()
+main("measurements.txt")
