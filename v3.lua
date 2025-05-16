@@ -7,7 +7,7 @@
 
 local fmt = string.format
 local sort = table.sort
-local join = table.concat
+local concat = table.concat
 
 local MIN = 1
 local MAX = 2
@@ -54,7 +54,7 @@ local function formatJavaMap(records)
 
 	sort(result)
 
-	return fmt("{%s}", join(result, ","))
+	return fmt("{%s}", concat(result, ","))
 end
 
 local function main(filename)

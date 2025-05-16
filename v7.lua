@@ -1,32 +1,79 @@
+--[[
+-- V7:
+--	- Fork/Join 1 process per CPU
+--	- Each worker reads its batch at once
+--	- Store statistics in an static array
+--	- Local function lookup
+--	- Avoid multiple rehashes
+--	- Read by byte
+--	- Use only integers
+--]]
+
+local min = math.min
+local max = math.max
+local floor = math.floor
+local chr = string.byte
+local fmt = string.format
+local substr = string.sub
+local sort = table.sort
+local concat = table.concat
+local unpack = table.unpack
+local output = io.write
+
 local tnew = require("table.new")
 
 local MIN = 1
 local MAX = 2
 local SUM = 3
 local COUNT = 4
+local MAX_CITIES = 10000
 
-local function ffnumber(str)
-	local start = 1
+local ASCII_LINEBREAK = 10
+local ASCII_MINUS = 45
+local ASCII_DOT = 46
+local ASCII_ZERO = 48
+local ASCII_SEMICOLON = 59
+
+local function sfind(str, fromPos, untilChar)
+	local cur = fromPos
+
+	while cur < #str do
+		if chr(str, cur) == untilChar then
+			break
+		end
+		cur = cur + 1
+	end
+
+	return cur
+end
+
+local function ffnumber(str, sstart, send)
 	local negative = false
-	if str:byte() == 45 then -- 45 = "-"
-		start = 2
+	if chr(str, sstart) == ASCII_MINUS then
+		sstart = sstart + 1
 		negative = true
 	end
 
-	local split = str:find(".", 1, true)
+	local dot = sstart
+	while dot < send do
+		if chr(str, dot) == ASCII_DOT then
+			break
+		end
+		dot = dot + 1
+	end
 
-	local base = 0
-	for i = start, split - 1 do
-		base = base * 10 + str:byte(i) - 48 -- 48 = "0"
+	local num = 0
+	for i = sstart, dot - 1 do
+		num = num * 10 + chr(str, i) - ASCII_ZERO
 	end
 
 	-- Multiply by 10 to ensure integer
 	-- Data has only 1 decimal digit
-	local result = base * 10 + str:byte(split + 1) - 48
+	num = num * 10 + chr(str, dot + 1) - ASCII_ZERO
 	if negative then
-		result = result * -1
+		num = num * -1
 	end
-	return result
+	return num
 end
 
 local function work(filename, offset, limit, ncities)
@@ -51,30 +98,29 @@ local function work(filename, offset, limit, ncities)
 	local content = file:read(endPos - startPos)
 	file:close()
 
-	local records = tnew(0, ncities)
-	local cstart = 1
-	while cstart < #content do
-		local cend = content:find(";", cstart)
-		local city = content:sub(cstart, cend - 1)
-		cstart = cend + 1
-		cend = content:find("\n", cstart)
-		local temp = ffnumber(content:sub(cstart, cend - 1))
-		cstart = cend + 1
+	local statistics = tnew(0, ncities)
+	local cur = 1
+	while cur < #content do
+		local smcolon = sfind(content, cur, ASCII_SEMICOLON)
+		local city = substr(content, cur, smcolon - 1)
+		local brline = sfind(content, smcolon + 1, ASCII_LINEBREAK)
+		local temperature = ffnumber(content, smcolon + 1, brline - 1)
+		cur = brline + 1
 
-		local record = records[city]
-		if record == nil then
-			records[city] = { temp, temp, temp, 1 }
+		local stats = statistics[city]
+		if stats == nil then
+			statistics[city] = { temperature, temperature, temperature, 1 }
 		else
-			record[MIN] = math.min(record[MIN], temp)
-			record[MAX] = math.max(record[MAX], temp)
-			record[SUM] = record[SUM] + temp
-			record[COUNT] = record[COUNT] + 1
+			stats[MIN] = min(stats[MIN], temperature)
+			stats[MAX] = max(stats[MAX], temperature)
+			stats[SUM] = stats[SUM] + temperature
+			stats[COUNT] = stats[COUNT] + 1
 		end
 	end
 
 	-- Send records back to master
-	for city, record in pairs(records) do
-		io.write(string.format("%s;%.1f;%.1f;%.1f;%.1f\n", city, table.unpack(record)))
+	for city, stats in pairs(statistics) do
+		output(fmt("%s;%.1f;%.1f;%.1f;%.1f\n", city, unpack(stats)))
 	end
 end
 
@@ -93,15 +139,15 @@ local function ncpu()
 end
 
 local function fork(workAmount, workerCount)
-	local batchSize = math.floor(workAmount / workerCount)
+	local batchSize = floor(workAmount / workerCount)
 	local remainder = workAmount % workerCount
 	local offset = 0
 	local workers = {}
 	for _ = 1, workerCount do
 		-- Spread the remaining through the workers
-		local limit = offset + batchSize + math.min(math.max(remainder, 0), 1)
+		local limit = offset + batchSize + min(max(remainder, 0), 1)
 
-		local cmd = string.format("luajit v7 worker %d %d", offset, limit)
+		local cmd = fmt("luajit v7 worker %d %d", offset, limit)
 		workers[#workers + 1] = assert(io.popen(cmd, "r"))
 
 		offset = limit
@@ -110,52 +156,69 @@ local function fork(workAmount, workerCount)
 	return workers
 end
 
-local function join(workers, ncities)
-	local statistics = tnew(0, ncities)
-	for _, worker in pairs(workers) do
-		for line in worker:lines() do
-			local city, minT, maxT, sum, count = line:match("(%S+);(%S+);(%S+);(%S+);(%S+)")
+local function aggregate(statistics, worker)
+	for line in worker:lines() do
+		local smcolon = sfind(line, 1, ASCII_SEMICOLON)
+		local city = substr(line, 1, smcolon - 1)
 
-			local stats = statistics[city]
-			if stats == nil then
-				statistics[city] = { tonumber(minT), tonumber(maxT), tonumber(sum), tonumber(count) }
-			else
-				stats[MIN] = math.min(stats[MIN], tonumber(minT))
-				stats[MAX] = math.max(stats[MAX], tonumber(maxT))
-				stats[SUM] = stats[SUM] + tonumber(sum)
-				stats[COUNT] = stats[COUNT] + tonumber(count)
-			end
+		smcolon = sfind(line, smcolon + 1, ASCII_SEMICOLON)
+		local minT = tonumber(substr(line, smcolon - 1, ASCII_SEMICOLON))
+
+		smcolon = sfind(line, smcolon + 1, ASCII_SEMICOLON)
+		local maxT = tonumber(substr(line, smcolon - 1, ASCII_SEMICOLON))
+
+		smcolon = sfind(line, smcolon + 1, ASCII_SEMICOLON)
+		local sum = tonumber(substr(line, smcolon - 1, ASCII_SEMICOLON))
+
+		local count = tonumber(substr(line, smcolon + 1, #line))
+
+		local stats = statistics[city]
+
+		if stats == nil then
+			statistics[city] = { minT, maxT, sum, count }
+		else
+			stats[MIN] = min(stats[MIN], minT)
+			stats[MAX] = max(stats[MAX], maxT)
+			stats[SUM] = stats[SUM] + sum
+			stats[COUNT] = stats[COUNT] + count
 		end
+	end
+end
 
+local function join(workers)
+	local statistics = tnew(0, MAX_CITIES)
+	for _, worker in pairs(workers) do
+		aggregate(statistics, worker)
 		worker:close()
 	end
 	return statistics
 end
 
-local function format(statistics)
+local function formatJavaMap(statistics)
 	local result = {}
 	for city, stats in pairs(statistics) do
 		-- Divides by 10 to get back to original scale
-		result[#result + 1] =
-			string.format("%s=%.1f/%.1f/%.1f", city, stats[MIN] / 10, stats[SUM] / 10 / stats[COUNT], stats[MAX] / 10)
+		local avg = stats[SUM] / 10 / stats[COUNT]
+		local entry = fmt("%s=%.1f/%.1f/%.1f", city, stats[MIN] / 10, avg, stats[MAX] / 10)
+
+		result[#result + 1] = entry
 	end
 
-	table.sort(result)
+	sort(result)
 
-	return string.format("{%s}", table.concat(result, ","))
+	return fmt("{%s}", concat(result, ","))
 end
 
 local function main(filename)
-	local ncities = 10000
 	local parallelism = ncpu()
 	if arg[1] == "worker" then
 		local offset = tonumber(arg[2])
 		local limit = tonumber(arg[3])
-		work(filename, offset, limit, math.floor(ncities / parallelism))
+		work(filename, offset, limit, floor(MAX_CITIES / parallelism))
 	else
 		local workers = fork(filesize(filename), parallelism)
-		local statistics = join(workers, ncities)
-		io.write(format(statistics))
+		local statistics = join(workers)
+		output(formatJavaMap(statistics))
 	end
 end
 
