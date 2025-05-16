@@ -36,6 +36,7 @@ local MIN = 1
 local MAX = 2
 local SUM = 3
 local COUNT = 4
+
 local MAX_CITIES = 10000
 
 local ASCII_LINEBREAK = 10
@@ -86,7 +87,7 @@ local function ffnumber(str, sstart, send)
 	return num
 end
 
-local function work(filename, offset, limit, ncities)
+local function work(filename, offset, limit)
 	local file = assert(io.open(filename, "r"))
 
 	-- Find position of first line in batch
@@ -108,7 +109,7 @@ local function work(filename, offset, limit, ncities)
 	local content = file:read(endPos - startPos)
 	file:close()
 
-	local statistics = tnew(0, ncities)
+	local statistics = tnew(0, MAX_CITIES)
 	local cur = 1
 	while cur < #content do
 		local smcolon = sfind(content, cur, ASCII_SEMICOLON)
@@ -224,8 +225,7 @@ local function main(filename)
 	if arg[1] == "worker" then
 		local offset = int(arg[2])
 		local limit = int(arg[3])
-		-- work(filename, offset, limit, floor(MAX_CITIES / parallelism))
-		work(filename, offset, limit, MAX_CITIES)
+		work(filename, offset, limit)
 	else
 		local workers = fork(filesize(filename), parallelism)
 		local statistics = join(workers)
