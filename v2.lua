@@ -1,3 +1,6 @@
+--[[
+-- V2: Read entire file
+--]]
 local function read(filename)
 	local file = assert(io.open(filename, "r"))
 	local content = file:read("*all")
@@ -6,48 +9,44 @@ local function read(filename)
 end
 
 local function aggregate(content)
-	local records = {}
+	local statistics = {}
 	for city, measurement in content:gmatch("(%S+);(%S+)") do
 		local temperature = tonumber(measurement)
-		local record = records[city]
+		local stats = statistics[city]
 
-		if record == nil then
-			records[city] = { ["min"] = temperature, ["max"] = temperature, ["sum"] = temperature, ["count"] = 1 }
+		if stats == nil then
+			statistics[city] = { ["min"] = temperature, ["max"] = temperature, ["sum"] = temperature, ["count"] = 1 }
 		else
-			if record["min"] > temperature then
-				record["min"] = temperature
+			if stats["min"] > temperature then
+				stats["min"] = temperature
 			end
-			if record["max"] < temperature then
-				record["max"] = temperature
+			if stats["max"] < temperature then
+				stats["max"] = temperature
 			end
-			record["sum"] = record["sum"] + temperature
-			record["count"] = record["count"] + 1
+			stats["sum"] = stats["sum"] + temperature
+			stats["count"] = stats["count"] + 1
 		end
-	end
-	return records
-end
-
-local function join(records)
-	local statistics = {}
-	for city, record in pairs(records) do
-		local mean = (record["sum"] / record["count"])
-		local stats = string.format("%s=%.1f/%.1f/%.1f", city, record["min"], mean, record["max"])
-
-		table.insert(statistics, stats)
 	end
 	return statistics
 end
 
-local function formatJavaMap(statistics)
-	table.sort(statistics)
+local function formatJavaMap(records)
+	local result = {}
+	for city, stats in pairs(records) do
+		local avg = (stats["sum"] / stats["count"])
+		local entry = string.format("%s=%.1f/%.1f/%.1f", city, stats["min"], avg, stats["max"])
 
-	return string.format("{%s}", table.concat(statistics, ","))
+		table.insert(result, entry)
+	end
+
+	table.sort(result)
+
+	return string.format("{%s}", table.concat(result, ","))
 end
 
 local function main(filename)
 	local content = read(filename)
-	local records = aggregate(content)
-	local statistics = join(records)
+	local statistics = aggregate(content)
 	print(formatJavaMap(statistics))
 end
 

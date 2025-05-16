@@ -1,3 +1,14 @@
+--[[
+-- V3:
+--	- Read entire file
+--	- Store statistics in an static array
+--	- Local function lookup
+--]]
+
+local fmt = string.format
+local sort = table.sort
+local join = table.concat
+
 local MIN = 1
 local MAX = 2
 local SUM = 3
@@ -11,49 +22,45 @@ local function read(filename)
 end
 
 local function aggregate(content)
-	local records = {}
+	local statistics = {}
 	for city, measurement in content:gmatch("(%S+);(%S+)") do
 		local temperature = tonumber(measurement)
-		local record = records[city]
+		local stats = statistics[city]
 
-		if record == nil then
-			records[city] = { temperature, temperature, temperature, 1 }
+		if stats == nil then
+			statistics[city] = { temperature, temperature, temperature, 1 }
 		else
-			if record[MIN] > temperature then
-				record[MIN] = temperature
+			if stats[MIN] > temperature then
+				stats[MIN] = temperature
 			end
-			if record[MAX] < temperature then
-				record[MAX] = temperature
+			if stats[MAX] < temperature then
+				stats[MAX] = temperature
 			end
-			record[SUM] = record[SUM] + temperature
-			record[COUNT] = record[COUNT] + 1
+			stats[SUM] = stats[SUM] + temperature
+			stats[COUNT] = stats[COUNT] + 1
 		end
-	end
-	return records
-end
-
-local function join(records)
-	local statistics = {}
-	for city, record in pairs(records) do
-		local mean = (record[SUM] / record[COUNT])
-		local stats = string.format("%s=%.1f/%.1f/%.1f", city, record[MIN], mean, record[MAX])
-
-		statistics[#statistics + 1] = stats
 	end
 	return statistics
 end
 
-local function format(statistics)
-	table.sort(statistics)
+local function formatJavaMap(records)
+	local result = {}
+	for city, stats in pairs(records) do
+		local avg = (stats[SUM] / stats[COUNT])
+		local entry = fmt("%s=%.1f/%.1f/%.1f", city, stats[MIN], avg, stats[MAX])
 
-	return string.format("{%s}", table.concat(statistics, ","))
+		result[#result + 1] = entry
+	end
+
+	sort(result)
+
+	return fmt("{%s}", join(result, ","))
 end
 
-local function brc(filename)
+local function main(filename)
 	local content = read(filename)
-	local records = aggregate(content)
-	local statistics = join(records)
-	print(format(statistics))
+	local statistics = aggregate(content)
+	print(formatJavaMap(statistics))
 end
 
-brc("measurements.txt")
+main("measurements.txt")

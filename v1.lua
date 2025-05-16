@@ -1,50 +1,49 @@
-local function aggregate(filename)
-	local records = {}
+--[[
+--   V1: Most straighforward implementation
+--]]
+local function readAndAggregate(filename)
+	local statistics = {}
 	for line in io.lines(filename) do
 		local city, measurement = line:match("(%S+);(%S+)")
 
 		local temperature = tonumber(measurement)
-		local record = records[city]
+		local stats = statistics[city]
 
-		if record == nil then
-			records[city] = { ["min"] = temperature, ["max"] = temperature, ["sum"] = temperature, ["count"] = 1 }
+		if stats == nil then
+			statistics[city] = { ["min"] = temperature, ["max"] = temperature, ["sum"] = temperature, ["count"] = 1 }
 		else
-			if temperature < record["min"] then
-				record["min"] = temperature
+			if temperature < stats["min"] then
+				stats["min"] = temperature
 			end
 
-			if temperature > record["max"] then
-				record["max"] = temperature
+			if temperature > stats["max"] then
+				stats["max"] = temperature
 			end
 
-			record["sum"] = record["sum"] + temperature
-			record["count"] = record["count"] + 1
+			stats["sum"] = stats["sum"] + temperature
+			stats["count"] = stats["count"] + 1
 		end
-	end
-	return records
-end
-
-local function join(records)
-	local statistics = {}
-	for city, record in pairs(records) do
-		local mean = (record["sum"] / record["count"])
-		local stats = string.format("%s=%.1f/%.1f/%.1f", city, record["min"], mean, record["max"])
-
-		table.insert(statistics, stats)
 	end
 	return statistics
 end
 
-local function format(statistics)
-	table.sort(statistics)
+local function formatJavaMap(records)
+	local result = {}
+	for city, stats in pairs(records) do
+		local avg = (stats["sum"] / stats["count"])
+		local entry = string.format("%s=%.1f/%.1f/%.1f", city, stats["min"], avg, stats["max"])
 
-	return string.format("{%s}", table.concat(statistics, ","))
+		table.insert(result, entry)
+	end
+
+	table.sort(result)
+
+	return string.format("{%s}", table.concat(result, ","))
 end
 
 local function main(filename)
-	local records = aggregate(filename)
-	local statistics = join(records)
-	print(format(statistics))
+	local statistics = readAndAggregate(filename)
+	print(formatJavaMap(statistics))
 end
 
 main("measurements.txt")
