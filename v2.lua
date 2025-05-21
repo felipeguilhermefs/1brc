@@ -15,7 +15,12 @@ local function aggregate(content)
 		local stats = statistics[city]
 
 		if stats == nil then
-			statistics[city] = { ["min"] = temperature, ["max"] = temperature, ["sum"] = temperature, ["count"] = 1 }
+			statistics[city] = {
+				["min"] = temperature,
+				["max"] = temperature,
+				["sum"] = temperature,
+				["count"] = 1,
+			}
 		else
 			if stats["min"] > temperature then
 				stats["min"] = temperature

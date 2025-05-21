@@ -5,12 +5,17 @@ local function readAndAggregate(filename)
 	local statistics = {}
 	for line in io.lines(filename) do
 		local city, measurement = line:match("(%S+);(%S+)")
-
 		local temperature = tonumber(measurement)
+
 		local stats = statistics[city]
 
 		if stats == nil then
-			statistics[city] = { ["min"] = temperature, ["max"] = temperature, ["sum"] = temperature, ["count"] = 1 }
+			statistics[city] = {
+				["min"] = temperature,
+				["max"] = temperature,
+				["sum"] = temperature,
+				["count"] = 1,
+			}
 		else
 			if temperature < stats["min"] then
 				stats["min"] = temperature

@@ -1,5 +1,5 @@
 --[[
--- V5:
+-- v4:
 --	- Fork/Join 1 process per CPU
 --	- Each worker reads line by line
 --	- Store statistics in an static array
