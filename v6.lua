@@ -29,7 +29,7 @@ local MAX_CITIES = 10000
 local ASCII_SEMICOLON = 59
 local ASCII_LINEBREAK = 10
 
-local function sfind(str, fromPos, untilChar)
+local function ffind(str, fromPos, untilChar)
 	local cur = fromPos
 
 	while cur < #str do
@@ -42,7 +42,7 @@ local function sfind(str, fromPos, untilChar)
 	return cur
 end
 
-local function work(filename, offset, limit, ncities)
+local function work(filename, offset, limit)
 	local file = assert(io.open(filename, "r"))
 
 	-- Find position of first line in batch
@@ -64,12 +64,12 @@ local function work(filename, offset, limit, ncities)
 	local content = file:read(endPos - startPos)
 	file:close()
 
-	local statistics = tnew(0, ncities)
+	local statistics = tnew(0, MAX_CITIES)
 	local cur = 1
 	while cur < #content do
-		local smcolon = sfind(content, cur, ASCII_SEMICOLON)
+		local smcolon = ffind(content, cur, ASCII_SEMICOLON)
 		local city = substr(content, cur, smcolon - 1)
-		local brline = sfind(content, smcolon + 1, ASCII_LINEBREAK)
+		local brline = ffind(content, smcolon + 1, ASCII_LINEBREAK)
 		local temperature = tonumber(substr(content, smcolon + 1, brline - 1))
 		cur = brline + 1
 
@@ -124,16 +124,16 @@ end
 
 local function aggregate(statistics, worker)
 	for line in worker:lines() do
-		local smcolon = sfind(line, 1, ASCII_SEMICOLON)
+		local smcolon = ffind(line, 1, ASCII_SEMICOLON)
 		local city = substr(line, 1, smcolon - 1)
 
-		smcolon = sfind(line, smcolon + 1, ASCII_SEMICOLON)
+		smcolon = ffind(line, smcolon + 1, ASCII_SEMICOLON)
 		local minT = tonumber(substr(line, smcolon - 1, ASCII_SEMICOLON))
 
-		smcolon = sfind(line, smcolon + 1, ASCII_SEMICOLON)
+		smcolon = ffind(line, smcolon + 1, ASCII_SEMICOLON)
 		local maxT = tonumber(substr(line, smcolon - 1, ASCII_SEMICOLON))
 
-		smcolon = sfind(line, smcolon + 1, ASCII_SEMICOLON)
+		smcolon = ffind(line, smcolon + 1, ASCII_SEMICOLON)
 		local sum = tonumber(substr(line, smcolon - 1, ASCII_SEMICOLON))
 
 		local count = tonumber(substr(line, smcolon + 1, #line))
@@ -175,13 +175,12 @@ local function formatJavaMap(statistics)
 end
 
 local function main(filename)
-	local parallelism = ncpu()
 	if arg[1] == "worker" then
 		local offset = tonumber(arg[2])
 		local limit = tonumber(arg[3])
-		work(filename, offset, limit, floor(MAX_CITIES / parallelism))
+		work(filename, offset, limit)
 	else
-		local workers = fork(filesize(filename), parallelism)
+		local workers = fork(filesize(filename), ncpu())
 		local statistics = join(workers)
 		output(formatJavaMap(statistics))
 	end

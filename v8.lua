@@ -45,7 +45,7 @@ local ASCII_DOT = 46
 local ASCII_ZERO = 48
 local ASCII_SEMICOLON = 59
 
-local function sfind(str, fromPos, untilChar)
+local function ffind(str, fromPos, untilChar)
 	local cur = fromPos
 
 	while cur < #str do
@@ -112,9 +112,9 @@ local function work(filename, offset, limit)
 	local statistics = tnew(0, MAX_CITIES)
 	local cur = 1
 	while cur < #content do
-		local smcolon = sfind(content, cur, ASCII_SEMICOLON)
+		local smcolon = ffind(content, cur, ASCII_SEMICOLON)
 		local city = substr(content, cur, smcolon - 1)
-		local brline = sfind(content, smcolon + 1, ASCII_LINEBREAK)
+		local brline = ffind(content, smcolon + 1, ASCII_LINEBREAK)
 		local temperature = ffnumber(content, smcolon + 1, brline - 1)
 		cur = brline + 1
 
@@ -169,16 +169,16 @@ end
 
 local function aggregate(statistics, worker)
 	for line in worker:lines() do
-		local smcolon = sfind(line, 1, ASCII_SEMICOLON)
+		local smcolon = ffind(line, 1, ASCII_SEMICOLON)
 		local city = substr(line, 1, smcolon - 1)
 
-		smcolon = sfind(line, smcolon + 1, ASCII_SEMICOLON)
+		smcolon = ffind(line, smcolon + 1, ASCII_SEMICOLON)
 		local minT = int(substr(line, smcolon - 1, ASCII_SEMICOLON))
 
-		smcolon = sfind(line, smcolon + 1, ASCII_SEMICOLON)
+		smcolon = ffind(line, smcolon + 1, ASCII_SEMICOLON)
 		local maxT = int(substr(line, smcolon - 1, ASCII_SEMICOLON))
 
-		smcolon = sfind(line, smcolon + 1, ASCII_SEMICOLON)
+		smcolon = ffind(line, smcolon + 1, ASCII_SEMICOLON)
 		local sum = int(substr(line, smcolon - 1, ASCII_SEMICOLON))
 
 		local count = int(substr(line, smcolon + 1, #line))
@@ -221,13 +221,12 @@ local function formatJavaMap(statistics)
 end
 
 local function main(filename)
-	local parallelism = ncpu() * 2 -- Keeps them busy
 	if arg[1] == "worker" then
 		local offset = int(arg[2])
 		local limit = int(arg[3])
 		work(filename, offset, limit)
 	else
-		local workers = fork(filesize(filename), parallelism)
+		local workers = fork(filesize(filename), ncpu() * 2)
 		local statistics = join(workers)
 		output(formatJavaMap(statistics))
 	end
