@@ -77,12 +77,12 @@ local function ncpu()
 	return parallelism
 end
 
-local function fork(workAmount, workerCount)
-	local batchSize = floor(workAmount / workerCount)
-	local remainder = workAmount % workerCount
+local function fork(filesize, ncpu)
+	local batchSize = floor(filesize / ncpu)
+	local remainder = filesize % ncpu
 	local offset = 0
 	local workers = {}
-	for _ = 1, workerCount do
+	for _ = 1, ncpu do
 		-- Spread the remaining through the workers
 		local limit = offset + batchSize + min(max(remainder, 0), 1)
 
