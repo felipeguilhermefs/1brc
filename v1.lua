@@ -32,9 +32,9 @@ local function readAndAggregate(filename)
 	return statistics
 end
 
-local function formatJavaMap(records)
+local function formatJavaMap(statistics)
 	local result = {}
-	for city, stats in pairs(records) do
+	for city, stats in pairs(statistics) do
 		local avg = (stats["sum"] / stats["count"])
 		local entry = string.format("%s=%.1f/%.1f/%.1f", city, stats["min"], avg, stats["max"])
 

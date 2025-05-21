@@ -160,9 +160,9 @@ local function join(workers)
 	return statistics
 end
 
-local function formatJavaMap(records)
+local function formatJavaMap(statistics)
 	local result = {}
-	for city, stats in pairs(records) do
+	for city, stats in pairs(statistics) do
 		local avg = stats[SUM] / stats[COUNT]
 		local entry = fmt("%s=%.1f/%.1f/%.1f", city, stats[MIN], avg, stats[MAX])
 
