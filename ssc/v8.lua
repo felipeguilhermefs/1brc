@@ -28,7 +28,6 @@ local fmt = string.format
 local substr = string.sub
 local sort = table.sort
 local concat = table.concat
-local unpack = table.unpack
 local output = io.write
 local int = ffi.C.atoi
 
@@ -131,7 +130,7 @@ local function work(filename, offset, limit)
 
 	-- Send records back to master
 	for station, stats in pairs(statistics) do
-		output(fmt("%s;%.1f;%.1f;%.1f;%.1f\n", station, unpack(stats)))
+		output(fmt("%s;%d;%d;%d;%d\n", station, unpack(stats)))
 	end
 end
 
@@ -169,19 +168,23 @@ end
 
 local function aggregate(statistics, worker)
 	for line in worker:lines() do
-		local smcolon = ffind(line, 1, ASCII_SEMICOLON)
-		local station = substr(line, 1, smcolon - 1)
+		local sstart = 1
+		local send = ffind(line, sstart, ASCII_SEMICOLON)
+		local station = substr(line, sstart, send - 1)
 
-		smcolon = ffind(line, smcolon + 1, ASCII_SEMICOLON)
-		local minT = int(substr(line, smcolon - 1, ASCII_SEMICOLON))
+		sstart = send + 1
+		send = ffind(line, sstart, ASCII_SEMICOLON)
+		local minT = int(substr(line, sstart, send - 1))
 
-		smcolon = ffind(line, smcolon + 1, ASCII_SEMICOLON)
-		local maxT = int(substr(line, smcolon - 1, ASCII_SEMICOLON))
+		sstart = send + 1
+		send = ffind(line, sstart, ASCII_SEMICOLON)
+		local maxT = int(substr(line, sstart, send - 1))
 
-		smcolon = ffind(line, smcolon + 1, ASCII_SEMICOLON)
-		local sum = int(substr(line, smcolon - 1, ASCII_SEMICOLON))
+		sstart = send + 1
+		send = ffind(line, sstart, ASCII_SEMICOLON)
+		local sum = int(substr(line, sstart, send - 1))
 
-		local count = int(substr(line, smcolon + 1, #line))
+		local count = int(substr(line, send + 1, #line))
 
 		local stats = statistics[station]
 
