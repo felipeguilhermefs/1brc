@@ -23,12 +23,12 @@ end
 
 local function aggregate(content)
 	local statistics = {}
-	for city, measurement in content:gmatch("(%S+);(%S+)") do
+	for station, measurement in content:gmatch("(%S+);(%S+)") do
 		local temperature = tonumber(measurement)
-		local stats = statistics[city]
+		local stats = statistics[station]
 
 		if stats == nil then
-			statistics[city] = { temperature, temperature, temperature, 1 }
+			statistics[station] = { temperature, temperature, temperature, 1 }
 		else
 			if stats[MIN] > temperature then
 				stats[MIN] = temperature
@@ -45,9 +45,9 @@ end
 
 local function formatJavaMap(statistics)
 	local result = {}
-	for city, stats in pairs(statistics) do
+	for station, stats in pairs(statistics) do
 		local avg = (stats[SUM] / stats[COUNT])
-		local entry = fmt("%s=%.1f/%.1f/%.1f", city, stats[MIN], avg, stats[MAX])
+		local entry = fmt("%s=%.1f/%.1f/%.1f", station, stats[MIN], avg, stats[MAX])
 
 		result[#result + 1] = entry
 	end

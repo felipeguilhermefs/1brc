@@ -102,14 +102,14 @@ local function work(filename, offset, limit)
 	local cur = 1
 	while cur < #content do
 		local smcolon = ffind(content, cur, ASCII_SEMICOLON)
-		local city = substr(content, cur, smcolon - 1)
+		local station = substr(content, cur, smcolon - 1)
 		local brline = ffind(content, smcolon + 1, ASCII_LINEBREAK)
 		local temperature = ffnumber(content, smcolon + 1, brline - 1)
 		cur = brline + 1
 
-		local stats = statistics[city]
+		local stats = statistics[station]
 		if stats == nil then
-			statistics[city] = { temperature, temperature, temperature, 1 }
+			statistics[station] = { temperature, temperature, temperature, 1 }
 		else
 			stats[MIN] = min(stats[MIN], temperature)
 			stats[MAX] = max(stats[MAX], temperature)
@@ -119,8 +119,8 @@ local function work(filename, offset, limit)
 	end
 
 	-- Send records back to master
-	for city, stats in pairs(statistics) do
-		output(fmt("%s;%.1f;%.1f;%.1f;%1f\n", city, unpack(stats)))
+	for station, stats in pairs(statistics) do
+		output(fmt("%s;%.1f;%.1f;%.1f;%1f\n", station, unpack(stats)))
 	end
 end
 
@@ -159,7 +159,7 @@ end
 local function aggregate(statistics, worker)
 	for line in worker:lines() do
 		local smcolon = ffind(line, 1, ASCII_SEMICOLON)
-		local city = substr(line, 1, smcolon - 1)
+		local station = substr(line, 1, smcolon - 1)
 
 		smcolon = ffind(line, smcolon + 1, ASCII_SEMICOLON)
 		local minT = tonumber(substr(line, smcolon - 1, ASCII_SEMICOLON))
@@ -172,10 +172,10 @@ local function aggregate(statistics, worker)
 
 		local count = tonumber(substr(line, smcolon + 1, #line))
 
-		local stats = statistics[city]
+		local stats = statistics[station]
 
 		if stats == nil then
-			statistics[city] = { minT, maxT, sum, count }
+			statistics[station] = { minT, maxT, sum, count }
 		else
 			stats[MIN] = min(stats[MIN], minT)
 			stats[MAX] = max(stats[MAX], maxT)
@@ -196,10 +196,10 @@ end
 
 local function formatJavaMap(statistics)
 	local result = {}
-	for city, stats in pairs(statistics) do
+	for station, stats in pairs(statistics) do
 		-- Divides by 10 to get back to original scale
 		local avg = stats[SUM] / 10 / stats[COUNT]
-		local entry = fmt("%s=%.1f/%.1f/%.1f", city, stats[MIN] / 10, avg, stats[MAX] / 10)
+		local entry = fmt("%s=%.1f/%.1f/%.1f", station, stats[MIN] / 10, avg, stats[MAX] / 10)
 
 		result[#result + 1] = entry
 	end

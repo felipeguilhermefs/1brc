@@ -4,13 +4,13 @@
 local function readAndAggregate(filename)
 	local statistics = {}
 	for line in io.lines(filename) do
-		local city, measurement = line:match("(%S+);(%S+)")
+		local station, measurement = line:match("(%S+);(%S+)")
 		local temperature = tonumber(measurement)
 
-		local stats = statistics[city]
+		local stats = statistics[station]
 
 		if stats == nil then
-			statistics[city] = {
+			statistics[station] = {
 				["min"] = temperature,
 				["max"] = temperature,
 				["sum"] = temperature,
@@ -34,9 +34,9 @@ end
 
 local function formatJavaMap(statistics)
 	local result = {}
-	for city, stats in pairs(statistics) do
+	for station, stats in pairs(statistics) do
 		local avg = (stats["sum"] / stats["count"])
-		local entry = string.format("%s=%.1f/%.1f/%.1f", city, stats["min"], avg, stats["max"])
+		local entry = string.format("%s=%.1f/%.1f/%.1f", station, stats["min"], avg, stats["max"])
 
 		table.insert(result, entry)
 	end

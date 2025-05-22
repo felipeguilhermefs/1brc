@@ -33,17 +33,17 @@ local function work(filename, offset, limit)
 	-- Aggregate
 	local statistics = {}
 	for line in nextLine do
-		local city, measurement = line:match("(%S+);(%S+)")
+		local station, measurement = line:match("(%S+);(%S+)")
 		local temperature = tonumber(measurement)
 
-		local stats = statistics[city]
+		local stats = statistics[station]
 		if stats then
 			stats[MIN] = min(stats[MIN], temperature)
 			stats[MAX] = max(stats[MAX], temperature)
 			stats[SUM] = stats[SUM] + temperature
 			stats[COUNT] = stats[COUNT] + 1
 		else
-			statistics[city] = { temperature, temperature, temperature, 1 }
+			statistics[station] = { temperature, temperature, temperature, 1 }
 		end
 
 		-- Stop aggregating when slice of work is done
@@ -54,8 +54,8 @@ local function work(filename, offset, limit)
 	file:close()
 
 	-- Send records back to master
-	for city, stats in pairs(statistics) do
-		output(fmt("%s;%.1f;%.1f;%.1f;%.1f\n", city, unpack(stats)))
+	for station, stats in pairs(statistics) do
+		output(fmt("%s;%.1f;%.1f;%.1f;%.1f\n", station, unpack(stats)))
 	end
 end
 
@@ -93,12 +93,12 @@ end
 
 local function aggregate(statistics, worker)
 	for line in worker:lines() do
-		local city, minT, maxT, sum, count = line:match("(%S+);(%S+);(%S+);(%S+);(%S+)")
+		local station, minT, maxT, sum, count = line:match("(%S+);(%S+);(%S+);(%S+);(%S+)")
 
-		local stats = statistics[city]
+		local stats = statistics[station]
 
 		if stats == nil then
-			statistics[city] = { tonumber(minT), tonumber(maxT), tonumber(sum), tonumber(count) }
+			statistics[station] = { tonumber(minT), tonumber(maxT), tonumber(sum), tonumber(count) }
 		else
 			stats[MIN] = min(stats[MIN], tonumber(minT))
 			stats[MAX] = max(stats[MAX], tonumber(maxT))
@@ -119,9 +119,9 @@ end
 
 local function formatJavaMap(statistics)
 	local result = {}
-	for city, stats in pairs(statistics) do
+	for station, stats in pairs(statistics) do
 		local avg = (stats[SUM] / stats[COUNT])
-		local entry = fmt("%s=%.1f/%.1f/%.1f", city, stats[MIN], avg, stats[MAX])
+		local entry = fmt("%s=%.1f/%.1f/%.1f", station, stats[MIN], avg, stats[MAX])
 
 		result[#result + 1] = entry
 	end
