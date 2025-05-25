@@ -143,9 +143,20 @@ end
 
 local function ncpu()
 	local tool = assert(io.popen("sysctl -n hw.ncpu", "r"))
-	local parallelism = assert(tool:read("*n"))
+	local cpus = assert(tool:read("*n"))
 	tool:close()
-	return parallelism
+
+	return cpus
+end
+
+local function parallelism()
+	local p = os.getenv("PARALLELISM")
+	if p then
+		return tonumber(p)
+	end
+
+	-- if not forced then it gets the number of CPU's
+	return ncpu() * 2
 end
 
 local function fork(filesize, ncpu)
@@ -229,10 +240,10 @@ local function main(filename)
 		local limit = int(arg[3])
 		work(filename, offset, limit)
 	else
-		local workers = fork(filesize(filename), ncpu() * 2)
+		local workers = fork(filesize(filename), parallelism())
 		local statistics = join(workers)
 		output(formatJavaMap(statistics))
 	end
 end
 
-main("measurements.txt")
+main(os.getenv("INPUT_FILE") or "measurements.txt")
