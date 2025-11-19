@@ -3,6 +3,11 @@ local ffi = require("ffi")
 
 ffi.cdef([[
 int atoi(const char *nptr);
+
+typedef struct {
+    int min, max, sum, count;
+} Stats;
+
 ]])
 
 collectgarbage("stop") -- Stop the GC do not need it for a quick run
@@ -11,17 +16,13 @@ local min = math.min
 local max = math.max
 local floor = math.floor
 local chr = string.byte
+local byte = string.char
 local fmt = string.format
 local substr = string.sub
 local sort = table.sort
 local concat = table.concat
 local output = io.write
 local int = ffi.C.atoi
-
-local MIN = 1
-local MAX = 2
-local SUM = 3
-local COUNT = 4
 
 local MAX_STATIONS = 10000
 
@@ -30,6 +31,8 @@ local ASCII_MINUS = 45
 local ASCII_DOT = 46
 local ASCII_ZERO = 48
 local ASCII_SEMICOLON = 59
+
+local STATS_SIZE = ffi.sizeof("Stats")
 
 local function ffind(str, fromPos, untilChar)
 	local cur = fromPos
@@ -106,19 +109,26 @@ local function work(filename, offset, limit)
 
 		local stats = statistics[station]
 		if stats == nil then
-			statistics[station] = { temperature, temperature, temperature, 1 }
+			statistics[station] = ffi.new("Stats", temperature, temperature, temperature, 1)
 		else
-			stats[MIN] = min(stats[MIN], temperature)
-			stats[MAX] = max(stats[MAX], temperature)
-			stats[SUM] = stats[SUM] + temperature
-			stats[COUNT] = stats[COUNT] + 1
+			stats.min = min(stats.min, temperature)
+			stats.max = max(stats.max, temperature)
+			stats.sum = stats.sum + temperature
+			stats.count = stats.count + 1
 		end
 	end
 
-	-- Send records back to master
+	-- Send records back to master using binary output
+	local outStats = {}
 	for station, stats in pairs(statistics) do
-		output(fmt("%s;%d;%d;%d;%d\n", station, unpack(stats)))
+		-- Record the length of the station name
+		outStats[#outStats + 1] = byte(#station)
+		-- Record the station name
+		outStats[#outStats + 1] = station
+		-- Record the raw binary struct data (4 * 4 bytes = 16 bytes)
+		outStats[#outStats + 1] = ffi.string(stats, STATS_SIZE)
 	end
+	output(concat(outStats))
 end
 
 local function filesize(filename)
@@ -154,34 +164,32 @@ local function fork(filesize, ncpu)
 end
 
 local function aggregate(statistics, worker)
-	for line in worker:lines() do
-		local sstart = 1
-		local send = ffind(line, sstart, ASCII_SEMICOLON)
-		local station = substr(line, sstart, send - 1)
+	local content = worker:read("*a")
+	local contentLen = #content
+	local offset = 1
 
-		sstart = send + 1
-		send = ffind(line, sstart, ASCII_SEMICOLON)
-		local minT = int(substr(line, sstart, send - 1))
+	while offset <= contentLen do
+		-- Read the length of the station name (1 byte)
+		local nameLen = chr(content, offset)
+		offset = offset + 1
 
-		sstart = send + 1
-		send = ffind(line, sstart, ASCII_SEMICOLON)
-		local maxT = int(substr(line, sstart, send - 1))
+		-- Read the station name
+		local station = substr(content, offset, nameLen)
+		offset = offset + nameLen
 
-		sstart = send + 1
-		send = ffind(line, sstart, ASCII_SEMICOLON)
-		local sum = int(substr(line, sstart, send - 1))
-
-		local count = int(substr(line, send + 1, #line))
+		-- Read the 16-byte raw string and cast into a C struct
+		local statsData = ffi.cast("Stats*", substr(content, offset, STATS_SIZE))
+		offset = offset + STATS_SIZE
 
 		local stats = statistics[station]
 
 		if stats == nil then
-			statistics[station] = { minT, maxT, sum, count }
+			statistics[station] = ffi.new("Stats", statsData.min, statsData.max, statsData.sum, statsData.count)
 		else
-			stats[MIN] = min(stats[MIN], minT)
-			stats[MAX] = max(stats[MAX], maxT)
-			stats[SUM] = stats[SUM] + sum
-			stats[COUNT] = stats[COUNT] + count
+			stats.min = min(stats.min, statsData.min)
+			stats.max = max(stats.max, statsData.max)
+			stats.sum = stats.sum + statsData.sum
+			stats.count = stats.count + statsData.count
 		end
 	end
 end
@@ -199,8 +207,8 @@ local function formatJavaMap(statistics)
 	local result = {}
 	for station, stats in pairs(statistics) do
 		-- Divides by 10 to get back to original scale
-		local avg = stats[SUM] / 10 / stats[COUNT]
-		local entry = fmt("%s=%.1f/%.1f/%.1f", station, stats[MIN] / 10, avg, stats[MAX] / 10)
+		local avg = stats.sum / 10 / stats.count
+		local entry = fmt("%s=%.1f/%.1f/%.1f", station, stats.min / 10, avg, stats.max / 10)
 
 		result[#result + 1] = entry
 	end
