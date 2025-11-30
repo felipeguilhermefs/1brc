@@ -2,7 +2,15 @@ local tnew = require("table.new")
 local ffi = require("ffi")
 
 ffi.cdef([[
+
 int atoi(const char *nptr);
+
+typedef struct {
+	int min;
+	int max;
+	int sum;
+	int count;
+} Stats;
 ]])
 
 collectgarbage("stop") -- Stop the GC do not need it for a quick run
@@ -17,11 +25,6 @@ local sort = table.sort
 local concat = table.concat
 local output = io.write
 local int = ffi.C.atoi
-
-local MIN = 1
-local MAX = 2
-local SUM = 3
-local COUNT = 4
 
 local MAX_STATIONS = 10000
 
@@ -106,18 +109,18 @@ local function work(filename, offset, limit)
 
 		local stats = statistics[station]
 		if stats == nil then
-			statistics[station] = { temperature, temperature, temperature, 1 }
+			statistics[station] = ffi.new("Stats", temperature, temperature, temperature, 1)
 		else
-			stats[MIN] = min(stats[MIN], temperature)
-			stats[MAX] = max(stats[MAX], temperature)
-			stats[SUM] = stats[SUM] + temperature
-			stats[COUNT] = stats[COUNT] + 1
+			stats.min = min(stats.min, temperature)
+			stats.max = max(stats.max, temperature)
+			stats.sum = stats.sum + temperature
+			stats.count = stats.count + 1
 		end
 	end
 
 	-- Send records back to master
 	for station, stats in pairs(statistics) do
-		output(fmt("%s;%d;%d;%d;%d\n", station, unpack(stats)))
+		output(fmt("%s;%d;%d;%d;%d\n", station, stats.min, stats.max, stats.sum, stats.count))
 	end
 end
 
@@ -176,12 +179,12 @@ local function aggregate(statistics, worker)
 		local stats = statistics[station]
 
 		if stats == nil then
-			statistics[station] = { minT, maxT, sum, count }
+			statistics[station] = ffi.new("Stats", minT, maxT, sum, count)
 		else
-			stats[MIN] = min(stats[MIN], minT)
-			stats[MAX] = max(stats[MAX], maxT)
-			stats[SUM] = stats[SUM] + sum
-			stats[COUNT] = stats[COUNT] + count
+			stats.min = min(stats.min, minT)
+			stats.max = max(stats.max, maxT)
+			stats.sum = stats.sum + sum
+			stats.count = stats.count + count
 		end
 	end
 end
@@ -199,8 +202,8 @@ local function formatJavaMap(statistics)
 	local result = {}
 	for station, stats in pairs(statistics) do
 		-- Divides by 10 to get back to original scale
-		local avg = stats[SUM] / 10 / stats[COUNT]
-		local entry = fmt("%s=%.1f/%.1f/%.1f", station, stats[MIN] / 10, avg, stats[MAX] / 10)
+		local avg = stats.sum / 10 / stats.count
+		local entry = fmt("%s=%.1f/%.1f/%.1f", station, stats.min / 10, avg, stats.max / 10)
 
 		result[#result + 1] = entry
 	end

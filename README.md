@@ -20,7 +20,7 @@ Env vars:
 - Fork Join (via processes)
 - Integer aggregation and serde (no floats)
 - Each worker reads its chunk at once (no line by line)
-- Table arrays for records instead of dictionaries
+- C structs for records instead of tables
 - Localize global functions for faster lookup
 - Parse by iterating chars, no matches and only substring when needed
 - Custom String to Number parser
