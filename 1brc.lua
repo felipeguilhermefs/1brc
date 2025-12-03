@@ -147,7 +147,7 @@ local function fork(filesize, ncpu)
 		-- Spread the remaining through the workers
 		local limit = offset + batchSize + min(max(remainder, 0), 1)
 
-		local cmd = fmt("%s %s worker %d %d", arg[-1], arg[0], offset, limit)
+		local cmd = fmt("%s %s worker %s %s", arg[-1], arg[0], offset, limit)
 		workers[#workers + 1] = assert(io.popen(cmd, "r"))
 
 		offset = limit
@@ -215,11 +215,11 @@ end
 
 local function main(filename)
 	if arg[1] == "worker" then
-		local offset = int(arg[2])
-		local limit = int(arg[3])
+		local offset = tonumber(arg[2])
+		local limit = tonumber(arg[3])
 		work(filename, offset, limit)
 	else
-		local workers = fork(filesize(filename), ncpu() * 2)
+		local workers = fork(filesize(filename), ncpu() * 3)
 		local statistics = join(workers)
 		output(formatJavaMap(statistics))
 	end
