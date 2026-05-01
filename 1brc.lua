@@ -79,7 +79,7 @@ local function map_file(filename)
     
     local size = filesize(filename)
 
-    local ptr = ffi.C.mmap(nil, size, PROT_READ, MAP_SHARED, fd, 0)
+    local ptr = ffi.C.mmap(nil, size, PROT_READ, MAP_PRIVATE, fd, 0)
     if ptr == ffi.cast("void*", -1) then
         ffi.C.close(fd)
         error("mmap failed")
@@ -104,40 +104,28 @@ local function work(ptr, start_offset, end_offset, worker_result, total_size)
 
     -- Sync to first newline
     if start_offset > 0 then
-        while cur < limit and cur[-1] ~= ASCII_LINEBREAK do
-            cur = cur + 1
-        end
+        while cur < limit and cur[-1] ~= 10 do cur = cur + 1 end
     end
 
     while cur < limit do
         local start_station = cur
-        while cur[0] ~= ASCII_SEMICOLON do
-            cur = cur + 1
-        end
+        while cur[0] ~= 59 do cur = cur + 1 end -- Scan for ';'
         local station_len = cur - start_station
         local station = ffi.string(start_station, station_len)
-        cur = cur + 1 -- Skip semicolon
-
-        local negative = false
-        if cur[0] == ASCII_MINUS then
-            negative = true
-            cur = cur + 1
-        end
+        cur = cur + 1 -- skip ';'
 
         local num = 0
-        while cur[0] ~= ASCII_DOT do
-            num = num * 10 + (cur[0] - ASCII_ZERO)
+        local sign = 1
+        if cur[0] == 45 then sign = -1; cur = cur + 1 end -- '-'
+        
+        while cur[0] ~= 46 do -- '.'
+            num = num * 10 + (cur[0] - 48)
             cur = cur + 1
         end
-        cur = cur + 1 -- Skip dot
-        num = num * 10 + (cur[0] - ASCII_ZERO)
-        cur = cur + 1 -- Skip decimal digit
-        while cur < file_end and cur[0] ~= ASCII_LINEBREAK do
-            cur = cur + 1
-        end
-        cur = cur + 1 -- Skip \n
-
-        if negative then num = -num end
+        num = (num * 10 + (cur[1] - 48)) * sign
+        cur = cur + 3 -- skip '.Y\n'
+        
+        if cur < file_end and cur[-1] == 13 then cur = cur + 1 end
 
         local stats = statistics[station]
         if stats == nil then
@@ -232,7 +220,7 @@ local function formatJavaMap(statistics)
 end
 
 local function main(filename)
-    local n = ncpu() * 3
+    local n = ncpu()
     local ptr, size = map_file(filename)
     ffi.C.madvise(ptr, size, MADV_SEQUENTIAL)
     local results, num_workers = fork_workers(ptr, size, n)
