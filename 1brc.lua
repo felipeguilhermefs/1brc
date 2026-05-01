@@ -41,7 +41,7 @@ local MAP_SHARED = 1
 local MAP_ANON = 0x1000
 local MADV_SEQUENTIAL = 2
 
-collectgarbage("stop") -- Stop the GC do not need it for a quick run
+collectgarbage("stop")
 
 local min = math.min
 local max = math.max
@@ -52,12 +52,6 @@ local concat = table.concat
 local output = io.write
 
 local MAX_STATIONS = 10000
-
-local ASCII_LINEBREAK = 10
-local ASCII_MINUS = 45
-local ASCII_DOT = 46
-local ASCII_ZERO = 48
-local ASCII_SEMICOLON = 59
 
 local function filesize(filename)
 	local file = assert(io.open(filename, "r"))
@@ -118,13 +112,17 @@ local function work(ptr, start_offset, end_offset, worker_result, total_size)
         local sign = 1
         if cur[0] == 45 then sign = -1; cur = cur + 1 end -- '-'
         
-        while cur[0] ~= 46 do -- '.'
-            num = num * 10 + (cur[0] - 48)
-            cur = cur + 1
+        -- Fastest branch-based parsing for X.Y or XX.Y
+        if cur[1] == 46 then -- d.d
+            num = (cur[0] - 48) * 10 + (cur[2] - 48)
+            cur = cur + 4
+        else -- dd.d
+            num = (cur[0] - 48) * 100 + (cur[1] - 48) * 10 + (cur[3] - 48)
+            cur = cur + 5
         end
-        num = (num * 10 + (cur[1] - 48)) * sign
-        cur = cur + 3 -- skip '.Y\n'
+        num = num * sign
         
+        -- Skip \r if present
         if cur < file_end and cur[-1] == 13 then cur = cur + 1 end
 
         local stats = statistics[station]
