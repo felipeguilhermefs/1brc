@@ -12,6 +12,7 @@ int munmap(void *addr, size_t len);
 pid_t fork(void);
 pid_t waitpid(pid_t pid, int *stat_loc, int options);
 void _exit(int status);
+int madvise(void *addr, size_t len, int advice);
 
 typedef struct {
 	int min;
@@ -38,15 +39,14 @@ local PROT_WRITE = 2
 local MAP_PRIVATE = 2
 local MAP_SHARED = 1
 local MAP_ANON = 0x1000
+local MADV_SEQUENTIAL = 2
 
 collectgarbage("stop") -- Stop the GC do not need it for a quick run
 
 local min = math.min
 local max = math.max
 local floor = math.floor
-local chr = string.byte
 local fmt = string.format
-local substr = string.sub
 local sort = table.sort
 local concat = table.concat
 local output = io.write
@@ -79,7 +79,7 @@ local function map_file(filename)
     
     local size = filesize(filename)
 
-    local ptr = ffi.C.mmap(nil, size, PROT_READ, MAP_PRIVATE, fd, 0)
+    local ptr = ffi.C.mmap(nil, size, PROT_READ, MAP_SHARED, fd, 0)
     if ptr == ffi.cast("void*", -1) then
         ffi.C.close(fd)
         error("mmap failed")
@@ -96,10 +96,11 @@ local function create_shared_memory(size)
     return ptr
 end
 
-local function work(ptr, start_offset, end_offset, worker_result)
+local function work(ptr, start_offset, end_offset, worker_result, total_size)
     local statistics = tnew(0, MAX_STATIONS)
     local cur = ptr + start_offset
     local limit = ptr + end_offset
+    local file_end = ptr + total_size
 
     -- Sync to first newline
     if start_offset > 0 then
@@ -130,13 +131,17 @@ local function work(ptr, start_offset, end_offset, worker_result)
         end
         cur = cur + 1 -- Skip dot
         num = num * 10 + (cur[0] - ASCII_ZERO)
-        cur = cur + 2 -- Skip decimal and linebreak
+        cur = cur + 1 -- Skip decimal digit
+        while cur < file_end and cur[0] ~= ASCII_LINEBREAK do
+            cur = cur + 1
+        end
+        cur = cur + 1 -- Skip \n
 
         if negative then num = -num end
 
         local stats = statistics[station]
         if stats == nil then
-            statistics[station] = {min = num, max = num, sum = num, count = 1}
+            statistics[station] = ffi.new("Stats", num, num, num, 1)
         else
             if num < stats.min then stats.min = num end
             if num > stats.max then stats.max = num end
@@ -172,7 +177,7 @@ local function fork_workers(ptr, size, n)
         local pid = ffi.C.fork()
         if pid == 0 then
             -- In child
-            work(ptr, offset, limit, results[i])
+            work(ptr, offset, limit, results[i], size)
             ffi.C._exit(0)
         elseif pid > 0 then
             pids[#pids + 1] = pid
@@ -227,8 +232,9 @@ local function formatJavaMap(statistics)
 end
 
 local function main(filename)
-    local n = ncpu()
+    local n = ncpu() * 3
     local ptr, size = map_file(filename)
+    ffi.C.madvise(ptr, size, MADV_SEQUENTIAL)
     local results, num_workers = fork_workers(ptr, size, n)
     local statistics = aggregate_results(results, num_workers)
     output(formatJavaMap(statistics))
