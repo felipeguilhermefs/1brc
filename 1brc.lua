@@ -3,7 +3,14 @@ local ffi = require("ffi")
 
 ffi.cdef([[
 
-int atoi(const char *nptr);
+typedef int pid_t;
+typedef long int off_t;
+
+void *mmap(void *addr, size_t len, int prot, int flags, int fd, off_t offset);
+
+pid_t fork(void);
+pid_t waitpid(pid_t pid, int *stat_loc, int options);
+void _exit(int status);
 
 typedef struct {
 	int min;
@@ -11,6 +18,18 @@ typedef struct {
 	int sum;
 	int count;
 } Stats;
+
+typedef struct {
+	char name[100];
+	int len;
+	Stats stats;
+} Station;
+
+typedef struct {
+	int count;
+	Station stations[10000];
+} Result;
+
 ]])
 
 collectgarbage("stop") -- Stop the GC do not need it for a quick run
@@ -24,15 +43,29 @@ local substr = string.sub
 local sort = table.sort
 local concat = table.concat
 local output = io.write
-local int = ffi.C.atoi
-
-local MAX_STATIONS = 10000
 
 local ASCII_LINEBREAK = 10
 local ASCII_MINUS = 45
 local ASCII_DOT = 46
 local ASCII_ZERO = 48
 local ASCII_SEMICOLON = 59
+local MAP_SHARED = 1
+local MAP_ANON = 0x1000
+local MAX_STATIONS = 10000
+local PROT_READ = 1
+local PROT_WRITE = 2
+
+local function allocSharedMem(nElements)
+	local size = ffi.sizeof("Result") * nElements
+
+	local ptr = ffi.C.mmap(nil, size, PROT_READ + PROT_WRITE, MAP_ANON + MAP_SHARED, -1, 0)
+
+	if ptr == ffi.cast("void*", -1) then
+		error("mmap shared failed")
+	end
+
+	return ffi.cast("Result*", ptr)
+end
 
 local function ffind(str, fromPos, untilChar)
 	local cur = fromPos
@@ -76,7 +109,8 @@ local function ffnumber(str, sstart, send)
 	return num
 end
 
-local function work(filename, offset, limit)
+local function work(filename, result, offset, limit)
+	local statistics = tnew(0, MAX_STATIONS)
 	local file = assert(io.open(filename, "r"))
 
 	-- Find position of first line in batch
@@ -98,7 +132,6 @@ local function work(filename, offset, limit)
 	local content = file:read(endPos - startPos)
 	file:close()
 
-	local statistics = tnew(0, MAX_STATIONS)
 	local cur = 1
 	while cur < #content do
 		local smcolon = ffind(content, cur, ASCII_SEMICOLON)
@@ -118,10 +151,16 @@ local function work(filename, offset, limit)
 		end
 	end
 
-	-- Send records back to master
+	-- Copy stats to shared memory
+	local i = 0
 	for station, stats in pairs(statistics) do
-		output(fmt("%s;%d;%d;%d;%d\n", station, stats.min, stats.max, stats.sum, stats.count))
+		local entry = result.stations[i]
+		ffi.copy(entry.name, station)
+		entry.len = #station
+		entry.stats = stats
+		i = i + 1
 	end
+	result.count = i
 end
 
 local function filesize(filename)
@@ -138,62 +177,58 @@ local function ncpu()
 	return parallelism
 end
 
-local function fork(filesize, ncpu)
-	local batchSize = floor(filesize / ncpu)
-	local remainder = filesize % ncpu
+local function fork(filesize, nWorkers, filename)
+	local batchSize = floor(filesize / nWorkers)
+	local remainder = filesize % nWorkers
 	local offset = 0
-	local workers = {}
-	for _ = 1, ncpu do
+	local workers = tnew(nWorkers, 0)
+	local results = allocSharedMem(nWorkers)
+	for i = 1, nWorkers do
 		-- Spread the remaining through the workers
 		local limit = offset + batchSize + min(max(remainder, 0), 1)
 
-		local cmd = fmt("%s %s worker %s %s", arg[-1], arg[0], offset, limit)
-		workers[#workers + 1] = assert(io.popen(cmd, "r"))
+		local pid = ffi.C.fork()
+		if pid == 0 then
+			-- In child process
+			work(filename, results[i - 1], offset, limit) -- results[i-1] because its C offset
+			ffi.C._exit(0)
+		elseif pid > 0 then
+			workers[i] = pid
+		else
+			error("fork failed")
+		end
 
 		offset = limit
 		remainder = remainder - 1
 	end
-	return workers
-end
 
-local function aggregate(statistics, worker)
-	for line in worker:lines() do
-		local sstart = 1
-		local send = ffind(line, sstart, ASCII_SEMICOLON)
-		local station = substr(line, sstart, send - 1)
-
-		sstart = send + 1
-		send = ffind(line, sstart, ASCII_SEMICOLON)
-		local minT = int(substr(line, sstart, send - 1))
-
-		sstart = send + 1
-		send = ffind(line, sstart, ASCII_SEMICOLON)
-		local maxT = int(substr(line, sstart, send - 1))
-
-		sstart = send + 1
-		send = ffind(line, sstart, ASCII_SEMICOLON)
-		local sum = int(substr(line, sstart, send - 1))
-
-		local count = int(substr(line, send + 1, #line))
-
-		local stats = statistics[station]
-
-		if stats == nil then
-			statistics[station] = ffi.new("Stats", minT, maxT, sum, count)
-		else
-			stats.min = min(stats.min, minT)
-			stats.max = max(stats.max, maxT)
-			stats.sum = stats.sum + sum
-			stats.count = stats.count + count
-		end
+	-- Wait for all workers
+	for i = 1, nWorkers do
+		ffi.C.waitpid(workers[i], nil, 0)
 	end
+
+	return results
 end
 
-local function join(workers)
+local function join(results, nWorkers)
 	local statistics = tnew(0, MAX_STATIONS)
-	for _, worker in pairs(workers) do
-		aggregate(statistics, worker)
-		worker:close()
+	for i = 0, nWorkers - 1 do
+		local result = results[i]
+
+		for j = 0, result.count - 1 do
+			local station = result.stations[j]
+			local name = ffi.string(station.name, station.len)
+			local stats = station.stats
+			local agg = statistics[name]
+			if agg == nil then
+				statistics[name] = ffi.new("Stats", stats.min, stats.max, stats.sum, stats.count)
+			else
+				agg.min = min(agg.min, stats.min)
+				agg.max = max(agg.max, stats.max)
+				agg.sum = agg.sum + stats.sum
+				agg.count = agg.count + stats.count
+			end
+		end
 	end
 	return statistics
 end
@@ -214,15 +249,10 @@ local function formatJavaMap(statistics)
 end
 
 local function main(filename)
-	if arg[1] == "worker" then
-		local offset = tonumber(arg[2])
-		local limit = tonumber(arg[3])
-		work(filename, offset, limit)
-	else
-		local workers = fork(filesize(filename), ncpu() * 3)
-		local statistics = join(workers)
-		output(formatJavaMap(statistics))
-	end
+	local nWorkers = ncpu() * 3
+	local results = fork(filesize(filename), nWorkers, filename)
+	local statistics = join(results, nWorkers)
+	output(formatJavaMap(statistics))
 end
 
 main("measurements.txt")
