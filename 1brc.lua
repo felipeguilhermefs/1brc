@@ -6,7 +6,11 @@ ffi.cdef([[
 typedef int pid_t;
 typedef long int off_t;
 
+int open(const char *path, int oflag, ...);
+int close(int fildes);
+
 void *mmap(void *addr, size_t len, int prot, int flags, int fd, off_t offset);
+int madvise(void *addr, size_t len, int advice);
 
 pid_t fork(void);
 pid_t waitpid(pid_t pid, int *stat_loc, int options);
@@ -39,19 +43,21 @@ local max = math.max
 local floor = math.floor
 local chr = string.byte
 local fmt = string.format
-local substr = string.sub
 local sort = table.sort
 local concat = table.concat
 local output = io.write
 
 local ASCII_LINEBREAK = 10
+local ASCII_CR = 13
 local ASCII_MINUS = 45
 local ASCII_DOT = 46
 local ASCII_ZERO = 48
 local ASCII_SEMICOLON = 59
+local MADV_SEQUENTIAL = 2
 local MAP_SHARED = 1
 local MAP_ANON = 0x1000
 local MAX_STATIONS = 10000
+local O_RDONLY = 0
 local PROT_READ = 1
 local PROT_WRITE = 2
 
@@ -67,78 +73,82 @@ local function allocSharedMem(nElements)
 	return ffi.cast("Result*", ptr)
 end
 
-local function ffind(str, fromPos, untilChar)
-	local cur = fromPos
-
-	while cur < #str do
-		if chr(str, cur) == untilChar then
-			break
-		end
-		cur = cur + 1
-	end
-
-	return cur
-end
-
-local function ffnumber(str, sstart, send)
-	local negative = false
-	if chr(str, sstart) == ASCII_MINUS then
-		sstart = sstart + 1
-		negative = true
-	end
-
-	local dot = sstart
-	while dot < send do
-		if chr(str, dot) == ASCII_DOT then
-			break
-		end
-		dot = dot + 1
-	end
-
-	local num = 0
-	for i = sstart, dot - 1 do
-		num = num * 10 + chr(str, i) - ASCII_ZERO
-	end
-
-	-- Multiply by 10 to ensure integer
-	-- Data has only 1 decimal digit
-	num = num * 10 + chr(str, dot + 1) - ASCII_ZERO
-	if negative then
-		num = num * -1
-	end
-	return num
-end
-
-local function work(filename, result, offset, limit)
-	local statistics = tnew(0, MAX_STATIONS)
+local function filesize(filename)
 	local file = assert(io.open(filename, "r"))
+	local bytes = file:seek("end")
+	file:close()
+	return bytes
+end
+
+local function mapFile(filename)
+	local fd = ffi.C.open(filename, O_RDONLY)
+	if fd < 0 then
+		error("could not open file")
+	end
+	local size = filesize(filename)
+
+	local ptr = ffi.C.mmap(nil, size, PROT_READ, MAP_SHARED, fd, 0)
+	if ptr == ffi.cast("void*", -1) then
+		ffi.C.close(fd)
+		error("mmap filed")
+	end
+	ffi.C.close(fd)
+
+	local file = ffi.cast("uint8_t*", ptr)
+	ffi.C.madvise(file, size, MADV_SEQUENTIAL)
+
+	return file, size
+end
+
+local function ffnumber(ptr)
+	local num = 0
+	local sign = 1
+	if ptr[0] == ASCII_MINUS then
+		sign = -1
+		ptr = ptr + 1
+	end
+
+	if ptr[1] == ASCII_DOT then -- d.dd
+		num = (ptr[0] - ASCII_ZERO) * 10 + (ptr[2] - ASCII_ZERO)
+		ptr = ptr + 4
+	else -- dd.d
+		num = (ptr[0] - ASCII_ZERO) * 100 + (ptr[1] - ASCII_ZERO) * 10 + (ptr[3] - ASCII_ZERO)
+		ptr = ptr + 5
+	end
+	num = num * sign
+	return ptr, num
+end
+
+local function work(file, batchStart, batchEnd, size, result)
+	local statistics = tnew(0, MAX_STATIONS)
+	local offset = file + batchStart
+	local limit = file + batchEnd
+	local fileEnd = file + size
 
 	-- Find position of first line in batch
-	file:seek("set", math.max(offset - 1, 0))
-	if offset > 0 and file:read(1) ~= "\n" then
-		local _ = file:read("*l")
+	if batchStart > 0 then
+		while offset < limit and offset[-1] ~= ASCII_LINEBREAK do
+			offset = offset + 1
+		end
 	end
-	local startPos = file:seek()
 
-	-- Find position of last line in batch
-	file:seek("set", limit)
-	if file:read(1) ~= "\n" then
-		local _ = file:read("*l")
-	end
-	local endPos = file:seek()
+	while offset < limit do
+		local startStation = offset
+		while offset[0] ~= ASCII_SEMICOLON do
+			offset = offset + 1
+		end
 
-	-- Read entire batch at once
-	file:seek("set", startPos)
-	local content = file:read(endPos - startPos)
-	file:close()
+		local stationLen = offset - startStation
+		local station = ffi.string(startStation, stationLen)
 
-	local cur = 1
-	while cur < #content do
-		local smcolon = ffind(content, cur, ASCII_SEMICOLON)
-		local station = substr(content, cur, smcolon - 1)
-		local brline = ffind(content, smcolon + 1, ASCII_LINEBREAK)
-		local temperature = ffnumber(content, smcolon + 1, brline - 1)
-		cur = brline + 1
+		offset = offset + 1 -- skip ;
+
+		local newOffset, temperature = ffnumber(offset)
+		offset = newOffset
+
+		if offset < fileEnd and offset[-1] == ASCII_CR then
+			offset = offset + 1
+		end
 
 		local stats = statistics[station]
 		if stats == nil then
@@ -163,13 +173,6 @@ local function work(filename, result, offset, limit)
 	result.count = i
 end
 
-local function filesize(filename)
-	local file = assert(io.open(filename, "r"))
-	local bytes = file:seek("end")
-	file:close()
-	return bytes
-end
-
 local function ncpu()
 	local tool = assert(io.popen("sysctl -n hw.ncpu", "r"))
 	local parallelism = assert(tool:read("*n"))
@@ -177,29 +180,24 @@ local function ncpu()
 	return parallelism
 end
 
-local function fork(filesize, nWorkers, filename)
-	local batchSize = floor(filesize / nWorkers)
-	local remainder = filesize % nWorkers
-	local offset = 0
+local function fork(file, size, nWorkers)
+	local batchSize = floor(size / nWorkers)
 	local workers = tnew(nWorkers, 0)
 	local results = allocSharedMem(nWorkers)
-	for i = 1, nWorkers do
-		-- Spread the remaining through the workers
-		local limit = offset + batchSize + min(max(remainder, 0), 1)
+	for i = 0, nWorkers - 1 do
+		local offset = i * batchSize
+		local limit = (i == nWorkers - 1) and size or (offset + batchSize)
 
 		local pid = ffi.C.fork()
 		if pid == 0 then
 			-- In child process
-			work(filename, results[i - 1], offset, limit) -- results[i-1] because its C offset
+			work(file, offset, limit, size, results[i])
 			ffi.C._exit(0)
 		elseif pid > 0 then
-			workers[i] = pid
+			workers[i + 1] = pid
 		else
 			error("fork failed")
 		end
-
-		offset = limit
-		remainder = remainder - 1
 	end
 
 	-- Wait for all workers
@@ -250,7 +248,8 @@ end
 
 local function main(filename)
 	local nWorkers = ncpu() * 3
-	local results = fork(filesize(filename), nWorkers, filename)
+	local file, size = mapFile(filename)
+	local results = fork(file, size, nWorkers)
 	local statistics = join(results, nWorkers)
 	output(formatJavaMap(statistics))
 end

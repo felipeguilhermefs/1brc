@@ -27,6 +27,7 @@ Env vars:
 - Create hash maps already at max size to avoid rehashes
 - No GC
 - Workers write to a shared memory region to avoid SerDe with parent
+- Map file into memory and share between processes
 
 ## Result:
 
@@ -44,5 +45,5 @@ luajit 1brc.lua 26.81s user 2.42s system 1027% cpu 2.846 total
 - Bitwise ops / bitmasks to avoid parsing
 - Use GPU
 - Better distribute the workload between processes
-- mmap the file
+- Aggregate worker result directly into shared memory
 
