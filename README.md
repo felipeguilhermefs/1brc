@@ -26,6 +26,7 @@ Env vars:
 - Custom String to Number parser
 - Create hash maps already at max size to avoid rehashes
 - No GC
+- Workers write to a shared memory region to avoid SerDe with parent
 
 ## Result:
 
@@ -40,9 +41,8 @@ luajit 1brc.lua 26.81s user 2.42s system 1027% cpu 2.846 total
 
 ## Possible improvements
 
-- Share memory between processes, so no need to serde intermediate results
-- Real threads instead of processes
 - Bitwise ops / bitmasks to avoid parsing
 - Use GPU
 - Better distribute the workload between processes
+- mmap the file
 
