@@ -45,5 +45,4 @@ luajit 1brc.lua 26.81s user 2.42s system 1027% cpu 2.846 total
 - Bitwise ops / bitmasks to avoid parsing
 - Use GPU
 - Better distribute the workload between processes
-- Aggregate worker result directly into shared memory
 

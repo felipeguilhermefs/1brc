@@ -41,7 +41,6 @@ collectgarbage("stop") -- Stop the GC do not need it for a quick run
 local min = math.min
 local max = math.max
 local floor = math.floor
-local chr = string.byte
 local fmt = string.format
 local sort = table.sort
 local concat = table.concat
@@ -90,11 +89,13 @@ local function mapFile(filename)
 	local ptr = ffi.C.mmap(nil, size, PROT_READ, MAP_SHARED, fd, 0)
 	if ptr == ffi.cast("void*", -1) then
 		ffi.C.close(fd)
-		error("mmap filed")
+		error("mmap failed")
 	end
 	ffi.C.close(fd)
 
 	local file = ffi.cast("uint8_t*", ptr)
+
+	-- Suggests kernel that this memory region will be read sequentially
 	ffi.C.madvise(file, size, MADV_SEQUENTIAL)
 
 	return file, size
@@ -120,7 +121,7 @@ local function ffnumber(ptr)
 end
 
 local function work(file, batchStart, batchEnd, size, result)
-	local statistics = tnew(0, MAX_STATIONS)
+	local stations = tnew(0, MAX_STATIONS)
 	local offset = file + batchStart
 	local limit = file + batchEnd
 	local fileEnd = file + size
@@ -132,6 +133,7 @@ local function work(file, batchStart, batchEnd, size, result)
 		end
 	end
 
+	local rIndex = 0
 	while offset < limit do
 		local startStation = offset
 		while offset[0] ~= ASCII_SEMICOLON do
@@ -150,27 +152,32 @@ local function work(file, batchStart, batchEnd, size, result)
 			offset = offset + 1
 		end
 
-		local stats = statistics[station]
-		if stats == nil then
-			statistics[station] = ffi.new("Stats", temperature, temperature, temperature, 1)
+		local sIndex = stations[station]
+		if sIndex == nil then
+			stations[station] = rIndex
+
+			local entry = result.stations[rIndex]
+
+			ffi.copy(entry.name, station)
+			entry.len = #station
+
+			entry.stats.min = temperature
+			entry.stats.max = temperature
+			entry.stats.sum = temperature
+			entry.stats.count = 1
+
+			rIndex = rIndex + 1
 		else
-			stats.min = min(stats.min, temperature)
-			stats.max = max(stats.max, temperature)
-			stats.sum = stats.sum + temperature
-			stats.count = stats.count + 1
+			local entry = result.stations[sIndex]
+
+			entry.stats.min = min(entry.stats.min, temperature)
+			entry.stats.max = max(entry.stats.max, temperature)
+			entry.stats.sum = entry.stats.sum + temperature
+			entry.stats.count = entry.stats.count + 1
 		end
 	end
 
-	-- Copy stats to shared memory
-	local i = 0
-	for station, stats in pairs(statistics) do
-		local entry = result.stations[i]
-		ffi.copy(entry.name, station)
-		entry.len = #station
-		entry.stats = stats
-		i = i + 1
-	end
-	result.count = i
+	result.count = rIndex
 end
 
 local function ncpu()
